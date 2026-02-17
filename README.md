@@ -27,23 +27,38 @@ CLI agents like Claude Code, Codex, and Gemini are powerful, but every session s
 L3 Raw Sessions ──(summarize)──▶ L2 Session Summaries ──(promote)──▶ L1 Project Knowledge
 ```
 
-## Installation
-
-```bash
-# Clone
-git clone https://github.com/lingzhi227/life-long-memory.git
-cd life-long-memory
-
-# Install (editable)
-pip install -e .
-
-# With MCP server support
-pip install -e ".[mcp]"
-```
-
 ## Quick Start
 
-### 1. Ingest your sessions
+```bash
+pip install "life-long-memory[mcp] @ git+https://github.com/lingzhi227/life-long-memory.git" && life-long-memory setup
+```
+
+That's it. This single command installs the package, detects your CLI tools, configures MCP, and ingests all sessions. Restart your CLI tool to activate.
+
+Or install from source:
+
+```bash
+git clone https://github.com/lingzhi227/life-long-memory.git
+cd life-long-memory
+pip install -e ".[mcp]" && life-long-memory setup
+```
+
+Use `--no-mcp` if you only want CLI access without MCP server configuration.
+
+### MCP Tools
+
+Once setup is complete and your CLI tool is restarted, four MCP tools become available:
+
+| Tool | Description |
+|------|-------------|
+| `memory_search` | Hybrid search (keyword + recency + importance) across all sessions |
+| `memory_timeline` | Chronological view of sessions, filterable by project and date |
+| `memory_project_context` | L1 knowledge + recent summaries for a project |
+| `memory_recall_session` | Full details of a specific session |
+
+## Advanced Usage
+
+### Manual Ingest
 
 ```bash
 # Ingest from all configured sources (Claude Code + Codex + Gemini)
@@ -55,7 +70,7 @@ life-long-memory ingest --source codex
 life-long-memory ingest --source gemini
 ```
 
-### 2. Generate summaries (L3 -> L2)
+### Generate Summaries (L3 -> L2)
 
 ```bash
 # Summarize all unsummarized sessions
@@ -68,7 +83,7 @@ life-long-memory summarize --limit 20
 life-long-memory summarize --model sonnet
 ```
 
-### 3. Promote knowledge (L2 -> L1)
+### Promote Knowledge (L2 -> L1)
 
 ```bash
 # Promote all projects
@@ -78,19 +93,15 @@ life-long-memory promote
 life-long-memory promote --project /path/to/project
 ```
 
-### 4. Auto-processing
+### Full Pipeline
 
-New sessions are **automatically ingested** whenever you query (search, timeline, recall, or MCP tools). No manual `ingest` step needed for day-to-day use.
-
-Summarization and knowledge promotion run **in the background** (once per hour) when triggered by MCP tool usage, so your agent always has fresh context.
-
-To manually run the full pipeline:
+Run ingest, summarize, and promote in one step:
 
 ```bash
 life-long-memory auto
 ```
 
-### 5. Search & explore
+### Search & Explore
 
 ```bash
 # Search across all sessions
@@ -109,7 +120,9 @@ life-long-memory recall <session-uuid> --messages
 life-long-memory stats
 ```
 
-### 6. Connect via MCP
+### Manual MCP Configuration
+
+If you prefer to configure MCP manually instead of using `life-long-memory setup`:
 
 **Claude Code** — add to `~/.claude/.mcp.json`:
 
@@ -124,13 +137,7 @@ life-long-memory stats
 }
 ```
 
-**Gemini CLI** — add via CLI, then set `trust: true` to bypass per-tool authorization prompts:
-
-```bash
-gemini mcp add life-long-memory -- life-long-memory serve
-```
-
-Even with YOLO mode (`Ctrl+Y`), Gemini CLI has a separate trust layer for MCP server tool calls. To avoid repeated authorization prompts, edit `~/.gemini/settings.json` and add `"trust": true`:
+**Gemini CLI** — add to `~/.gemini/settings.json` with `"trust": true` to bypass per-tool authorization prompts:
 
 ```json
 {
@@ -143,15 +150,6 @@ Even with YOLO mode (`Ctrl+Y`), Gemini CLI has a separate trust layer for MCP se
   }
 }
 ```
-
-Restart your CLI tool. Four MCP tools become available:
-
-| Tool | Description |
-|------|-------------|
-| `memory_search` | Hybrid search (keyword + recency + importance) across all sessions |
-| `memory_timeline` | Chronological view of sessions, filterable by project and date |
-| `memory_project_context` | L1 knowledge + recent summaries for a project |
-| `memory_recall_session` | Full details of a specific session |
 
 ## LLM Backend
 

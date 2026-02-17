@@ -6,8 +6,14 @@ build-backend = "hatchling.build"
 name = "life-long-memory"
 version = "0.1.0"
 description = "Lifelong context memory system for CLI agents"
+readme = "README.md"
+license = "MIT"
 requires-python = ">=3.11"
 dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/lingzhi227/life-long-memory"
+Repository = "https://github.com/lingzhi227/life-long-memory"
 
 [project.optional-dependencies]
 summarize = ["anthropic>=0.40.0"]
