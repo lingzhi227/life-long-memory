@@ -1,0 +1,142 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 680" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0f0f1a"/>
+      <stop offset="100%" stop-color="#1a1a2e"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="680" rx="24" fill="url(#bg)"/>
+  <rect width="1200" height="680" rx="24" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>
+
+  <!-- Title -->
+  <text x="600" y="58" text-anchor="middle" font-size="40" font-weight="700" fill="#fff">
+    <tspan fill="#7c6aef">Life-Long</tspan> Memory
+  </text>
+  <text x="600" y="88" text-anchor="middle" font-size="17" fill="rgba(255,255,255,0.4)" font-weight="400">
+    Your AI coding agent remembers everything, across every session.
+  </text>
+
+  <!-- ===== Pipeline ===== -->
+  <!-- Stage 1: Sessions -->
+  <rect x="52" y="126" width="176" height="120" rx="16" fill="rgba(99,179,237,0.08)" stroke="rgba(99,179,237,0.2)" stroke-width="1"/>
+  <rect x="112" y="142" width="56" height="56" rx="14" fill="rgba(99,179,237,0.15)"/>
+  <text x="140" y="179" text-anchor="middle" font-size="26">💬</text>
+  <text x="140" y="218" text-anchor="middle" font-size="16" font-weight="600" fill="#fff">Sessions</text>
+  <text x="140" y="236" text-anchor="middle" font-size="12" fill="rgba(255,255,255,0.4)">Claude Code &amp; Codex CLI</text>
+
+  <!-- Arrow 1 -->
+  <path d="M 238 186 L 272 186" stroke="rgba(255,255,255,0.15)" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+
+  <!-- Stage 2: Ingest -->
+  <rect x="282" y="126" width="176" height="120" rx="16" fill="rgba(124,106,239,0.08)" stroke="rgba(124,106,239,0.2)" stroke-width="1"/>
+  <rect x="342" y="142" width="56" height="56" rx="14" fill="rgba(124,106,239,0.15)"/>
+  <text x="370" y="179" text-anchor="middle" font-size="26">📥</text>
+  <text x="370" y="218" text-anchor="middle" font-size="16" font-weight="600" fill="#fff">Ingest</text>
+  <text x="370" y="236" text-anchor="middle" font-size="12" fill="rgba(255,255,255,0.4)">Parse &amp; normalize</text>
+
+  <!-- Arrow 2 -->
+  <path d="M 468 186 L 502 186" stroke="rgba(255,255,255,0.15)" stroke-width="2" fill="none"/>
+
+  <!-- Stage 3: Summarize -->
+  <rect x="512" y="126" width="176" height="120" rx="16" fill="rgba(236,153,75,0.08)" stroke="rgba(236,153,75,0.2)" stroke-width="1"/>
+  <rect x="572" y="142" width="56" height="56" rx="14" fill="rgba(236,153,75,0.15)"/>
+  <text x="600" y="179" text-anchor="middle" font-size="26">🧠</text>
+  <text x="600" y="218" text-anchor="middle" font-size="16" font-weight="600" fill="#fff">Summarize</text>
+  <text x="600" y="236" text-anchor="middle" font-size="12" fill="rgba(255,255,255,0.4)">LLM extracts key decisions</text>
+
+  <!-- Arrow 3 -->
+  <path d="M 698 186 L 732 186" stroke="rgba(255,255,255,0.15)" stroke-width="2" fill="none"/>
+
+  <!-- Stage 4: Consolidate -->
+  <rect x="742" y="126" width="176" height="120" rx="16" fill="rgba(72,199,142,0.08)" stroke="rgba(72,199,142,0.2)" stroke-width="1"/>
+  <rect x="802" y="142" width="56" height="56" rx="14" fill="rgba(72,199,142,0.15)"/>
+  <text x="830" y="179" text-anchor="middle" font-size="26">💡</text>
+  <text x="830" y="218" text-anchor="middle" font-size="16" font-weight="600" fill="#fff">Consolidate</text>
+  <text x="830" y="236" text-anchor="middle" font-size="12" fill="rgba(255,255,255,0.4)">Cross-session knowledge</text>
+
+  <!-- Arrow 4 -->
+  <path d="M 928 186 L 962 186" stroke="rgba(255,255,255,0.15)" stroke-width="2" fill="none"/>
+
+  <!-- Stage 5: MCP -->
+  <rect x="972" y="126" width="176" height="120" rx="16" fill="rgba(237,100,166,0.08)" stroke="rgba(237,100,166,0.2)" stroke-width="1"/>
+  <rect x="1032" y="142" width="56" height="56" rx="14" fill="rgba(237,100,166,0.15)"/>
+  <text x="1060" y="179" text-anchor="middle" font-size="26">🔌</text>
+  <text x="1060" y="218" text-anchor="middle" font-size="16" font-weight="600" fill="#fff">MCP Server</text>
+  <text x="1060" y="236" text-anchor="middle" font-size="12" fill="rgba(255,255,255,0.4)">Agent queries real-time</text>
+
+  <!-- Arrow heads (simple triangles via path) -->
+  <polygon points="272,182 264,178 264,186" fill="rgba(255,255,255,0.15)"/>
+  <polygon points="502,182 494,178 494,186" fill="rgba(255,255,255,0.15)"/>
+  <polygon points="732,182 724,178 724,186" fill="rgba(255,255,255,0.15)"/>
+  <polygon points="962,182 954,178 954,186" fill="rgba(255,255,255,0.15)"/>
+
+  <!-- ===== Three Tiers ===== -->
+  <!-- Tier L3 -->
+  <rect x="52" y="290" width="352" height="168" rx="14" fill="rgba(99,179,237,0.05)" stroke="rgba(99,179,237,0.15)" stroke-width="1"/>
+  <text x="76" y="320" font-size="12" font-weight="700" fill="#63b3ed" letter-spacing="1.5">L3 — RAW</text>
+  <text x="76" y="346" font-size="19" font-weight="600" fill="#fff">Full Transcripts</text>
+  <text x="76" y="372" font-size="13" fill="rgba(255,255,255,0.4)">
+    <tspan x="76" dy="0">Every message, tool call, and result from</tspan>
+    <tspan x="76" dy="20">your coding sessions. FTS5 full-text indexed</tspan>
+    <tspan x="76" dy="20">for instant keyword search.</tspan>
+  </text>
+  <text x="76" y="440" font-size="12" fill="rgba(99,179,237,0.5)" font-style="italic">life-long-memory ingest</text>
+
+  <!-- Tier L2 -->
+  <rect x="424" y="290" width="352" height="168" rx="14" fill="rgba(124,106,239,0.05)" stroke="rgba(124,106,239,0.15)" stroke-width="1"/>
+  <text x="448" y="320" font-size="12" font-weight="700" fill="#7c6aef" letter-spacing="1.5">L2 — SUMMARIES</text>
+  <text x="448" y="346" font-size="19" font-weight="600" fill="#fff">Session Intelligence</text>
+  <text x="448" y="372" font-size="13" fill="rgba(255,255,255,0.4)">
+    <tspan x="448" dy="0">Structured summaries: key decisions made,</tspan>
+    <tspan x="448" dy="20">files touched, commands run, and session</tspan>
+    <tspan x="448" dy="20">outcome (completed / partial / error).</tspan>
+  </text>
+  <text x="448" y="440" font-size="12" fill="rgba(124,106,239,0.5)" font-style="italic">life-long-memory summarize</text>
+
+  <!-- Tier L1 -->
+  <rect x="796" y="290" width="352" height="168" rx="14" fill="rgba(72,199,142,0.05)" stroke="rgba(72,199,142,0.15)" stroke-width="1"/>
+  <text x="820" y="320" font-size="12" font-weight="700" fill="#48c78e" letter-spacing="1.5">L1 — KNOWLEDGE</text>
+  <text x="820" y="346" font-size="19" font-weight="600" fill="#fff">Project Wisdom</text>
+  <text x="820" y="372" font-size="13" fill="rgba(255,255,255,0.4)">
+    <tspan x="820" dy="0">Stable patterns, preferences, and architecture</tspan>
+    <tspan x="820" dy="20">decisions consolidated across sessions. Each</tspan>
+    <tspan x="820" dy="20">entry carries a confidence score (0–1).</tspan>
+  </text>
+  <text x="820" y="440" font-size="12" fill="rgba(72,199,142,0.5)" font-style="italic">life-long-memory promote</text>
+
+  <!-- Arrows between tiers -->
+  <path d="M 404 374 L 424 374" stroke="rgba(255,255,255,0.1)" stroke-width="1.5" stroke-dasharray="4,3" fill="none"/>
+  <polygon points="422,371 416,368 416,374" fill="rgba(255,255,255,0.1)"/>
+  <path d="M 776 374 L 796 374" stroke="rgba(255,255,255,0.1)" stroke-width="1.5" stroke-dasharray="4,3" fill="none"/>
+  <polygon points="794,371 788,368 788,374" fill="rgba(255,255,255,0.1)"/>
+
+  <!-- ===== MCP Tools Row ===== -->
+  <rect x="52" y="498" width="1096" height="80" rx="14" fill="rgba(237,100,166,0.04)" stroke="rgba(237,100,166,0.1)" stroke-width="1"/>
+  <text x="90" y="534" font-size="12" font-weight="700" fill="#ed64a6" letter-spacing="1.5">MCP TOOLS</text>
+  <text x="90" y="558" font-size="13" fill="rgba(255,255,255,0.4)">memory_search</text>
+  <rect x="330" y="512" width="1" height="52" fill="rgba(255,255,255,0.06)"/>
+  <text x="368" y="534" font-size="12" font-weight="700" fill="#ed64a6" letter-spacing="1.5">SEARCH</text>
+  <text x="368" y="558" font-size="13" fill="rgba(255,255,255,0.4)">BM25 + recency + importance</text>
+  <rect x="608" y="512" width="1" height="52" fill="rgba(255,255,255,0.06)"/>
+  <text x="646" y="534" font-size="12" font-weight="700" fill="#ed64a6" letter-spacing="1.5">TIMELINE</text>
+  <text x="646" y="558" font-size="13" fill="rgba(255,255,255,0.4)">Chronological session view</text>
+  <rect x="886" y="512" width="1" height="52" fill="rgba(255,255,255,0.06)"/>
+  <text x="924" y="534" font-size="12" font-weight="700" fill="#ed64a6" letter-spacing="1.5">PROJECT CONTEXT</text>
+  <text x="924" y="558" font-size="13" fill="rgba(255,255,255,0.4)">L1 knowledge + recent summaries</text>
+
+  <!-- ===== Bottom badges ===== -->
+  <circle cx="310" cy="636" r="4" fill="#63b3ed"/>
+  <text x="322" y="640" font-size="14" fill="rgba(255,255,255,0.35)">Zero API keys needed</text>
+  <circle cx="510" cy="636" r="4" fill="#7c6aef"/>
+  <text x="522" y="640" font-size="14" fill="rgba(255,255,255,0.35)">SQLite-only storage</text>
+  <circle cx="700" cy="636" r="4" fill="#48c78e"/>
+  <text x="712" y="640" font-size="14" fill="rgba(255,255,255,0.35)">Claude Code &amp; Codex</text>
+  <circle cx="890" cy="636" r="4" fill="#ec994b"/>
+  <text x="902" y="640" font-size="14" fill="rgba(255,255,255,0.35)">Open source · MIT</text>
+</svg>

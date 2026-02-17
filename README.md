@@ -2,6 +2,10 @@
 
 A lifelong context memory system for CLI coding agents. Automatically ingests, summarizes, and consolidates knowledge from your [Claude Code](https://docs.anthropic.com/en/docs/claude-code) and [Codex CLI](https://github.com/openai/codex) sessions, then exposes it via [MCP](https://modelcontextprotocol.io/) tools so your AI agent remembers what you've worked on across sessions.
 
+<p align="center">
+  <img src="assets/architecture.svg" alt="Life-Long Memory Architecture" width="100%">
+</p>
+
 ## Why
 
 CLI agents like Claude Code and Codex are powerful, but every session starts from scratch. Life-Long Memory solves this by:
@@ -11,91 +15,16 @@ CLI agents like Claude Code and Codex are powerful, but every session starts fro
 - **Consolidating** cross-session patterns into stable project knowledge
 - **Exposing** everything via MCP tools your agent can query in real-time
 
-## Architecture
-
-```
-                         You + CLI Agent
-                              |
-                    +---------+---------+
-                    |                   |
-              Claude Code            Codex CLI
-                    |                   |
-              ~/.claude/            ~/.codex/
-              projects/             sessions/
-                    |                   |
-                    +-------+-----------+
-                            |
-                      life-long-memory
-                         ingest
-                            |
-                    +-------+-------+
-                    |               |
-                 Parsers         SQLite DB
-              (normalize)    (~/.tactical/memory.sqlite)
-                    |               |
-                    +-------+-------+
-                            |
-               +------------+------------+
-               |            |            |
-             L3 Raw    L2 Summary   L1 Knowledge
-           (messages)  (per-session)  (per-project)
-               |            |            |
-               +------------+------------+
-                            |
-                       MCP Server
-                     (life-long-memory serve)
-                            |
-                  +---------+---------+
-                  |         |         |
-              memory_   memory_   memory_
-              search   timeline  project_
-                                 context
-```
-
 ## Three-Tier Memory Model
 
+| Tier | Name | Scope | What it stores |
+|------|------|-------|----------------|
+| **L3** | Raw | All messages | Full conversation transcripts, FTS5 full-text indexed |
+| **L2** | Summaries | Per-session | Key decisions, files touched, commands run, outcome |
+| **L1** | Knowledge | Per-project | Stable patterns & architecture decisions with confidence scores |
+
 ```
-  +-----------------------------------------------------------------+
-  |                                                                 |
-  |  L1  Consolidated Knowledge                   (per-project)     |
-  |  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~         |
-  |  Stable patterns, preferences, architecture decisions,          |
-  |  gotchas, and workflows extracted from multiple sessions.       |
-  |  Only entries with confidence >= 0.5 are kept.                  |
-  |                                                                 |
-  |  Example:                                                       |
-  |    [architecture] (0.95) MAS project uses standardized          |
-  |      .tool_installer directory with Docker/BioContainers...     |
-  |    [preference]   (0.85) Responds in Chinese when user          |
-  |      writes in Chinese                                          |
-  |                                                                 |
-  +-----------------------------------------------------------------+
-        ^  promote (cross-session LLM analysis)
-        |
-  +-----------------------------------------------------------------+
-  |                                                                 |
-  |  L2  Session Summaries                        (per-session)     |
-  |  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~         |
-  |  Structured summary of each session:                            |
-  |    - summary_text (200-500 words)                               |
-  |    - key_decisions                                               |
-  |    - files_touched                                               |
-  |    - commands_run                                                |
-  |    - outcome (completed / partial / error)                      |
-  |                                                                 |
-  +-----------------------------------------------------------------+
-        ^  summarize (per-session LLM analysis)
-        |
-  +-----------------------------------------------------------------+
-  |                                                                 |
-  |  L3  Raw Sessions                             (all messages)    |
-  |  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~         |
-  |  Full conversation transcripts normalized from multiple         |
-  |  CLI tools. Includes user messages, assistant responses,        |
-  |  tool calls, tool results, and thinking blocks.                 |
-  |  FTS5 full-text indexed for keyword search.                     |
-  |                                                                 |
-  +-----------------------------------------------------------------+
+L3 Raw Sessions ──(summarize)──▶ L2 Session Summaries ──(promote)──▶ L1 Project Knowledge
 ```
 
 ## Installation
