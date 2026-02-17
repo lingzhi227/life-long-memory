@@ -14,6 +14,7 @@ from src.db import MemoryDB
 from src.entities import extract_entities_for_session
 from src.parsers.codex import CodexParser
 from src.parsers.claude_code import ClaudeCodeParser
+from src.parsers.gemini import GeminiParser
 from src.search import hybrid_search, timeline_search
 
 
@@ -34,6 +35,8 @@ def cmd_ingest(args: argparse.Namespace) -> None:
         sources.append(("codex", CodexParser(), config.codex_paths))
     if args.source in (None, "claude_code") and config.claude_code_enabled:
         sources.append(("claude_code", ClaudeCodeParser(), config.claude_code_paths))
+    if args.source in (None, "gemini") and config.gemini_enabled:
+        sources.append(("gemini", GeminiParser(), config.gemini_paths))
 
     total_sessions = 0
     total_messages = 0
@@ -82,7 +85,10 @@ def cmd_ingest(args: argparse.Namespace) -> None:
 
 def cmd_search(args: argparse.Namespace) -> None:
     """Search across sessions."""
+    from src.auto import auto_ingest
+
     db = get_db()
+    auto_ingest(db)
     query = " ".join(args.query)
 
     after_epoch = None
@@ -120,7 +126,10 @@ def cmd_search(args: argparse.Namespace) -> None:
 
 def cmd_timeline(args: argparse.Namespace) -> None:
     """Show session timeline."""
+    from src.auto import auto_ingest
+
     db = get_db()
+    auto_ingest(db)
 
     after_epoch = None
     before_epoch = None
@@ -261,7 +270,10 @@ def cmd_serve(args: argparse.Namespace) -> None:
 
 def cmd_recall(args: argparse.Namespace) -> None:
     """Recall a specific session."""
+    from src.auto import auto_ingest
+
     db = get_db()
+    auto_ingest(db)
     session = db.get_session(args.session_id)
     if not session:
         print(f"Session not found: {args.session_id}")
@@ -303,6 +315,24 @@ def cmd_recall(args: argparse.Namespace) -> None:
                 print(f"  [{role}]: {text[:300]}")
 
 
+def cmd_auto(args: argparse.Namespace) -> None:
+    """Run full pipeline: ingest → summarize → promote."""
+    from src.auto import auto_process
+
+    start = time.time()
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print(f"[{ts}] Running auto pipeline: ingest → summarize → promote")
+
+    result = auto_process(model=args.model, force=True)
+
+    elapsed = time.time() - start
+    ts_end = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print(f"\n[{ts_end}] Auto pipeline complete in {elapsed:.1f}s")
+    print(f"  Ingested: {result['ingested']} sessions")
+    print(f"  Summarized: {result['summarized']} sessions")
+    print(f"  Promoted: {result['promoted']} knowledge entries")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="life-long-memory",
@@ -312,7 +342,7 @@ def main() -> None:
 
     # ingest
     p_ingest = sub.add_parser("ingest", help="Ingest sessions from CLI tools")
-    p_ingest.add_argument("--source", choices=["codex", "claude_code"], help="Only ingest from this source")
+    p_ingest.add_argument("--source", choices=["codex", "claude_code", "gemini"], help="Only ingest from this source")
     p_ingest.add_argument("--force", action="store_true", help="Re-ingest already processed sessions")
 
     # search
@@ -335,12 +365,12 @@ def main() -> None:
     # summarize
     p_summarize = sub.add_parser("summarize", help="Generate session summaries")
     p_summarize.add_argument("--limit", type=int, help="Max sessions to summarize")
-    p_summarize.add_argument("--model", default="haiku", help="Model for summarization (default: haiku)")
+    p_summarize.add_argument("--model", default=None, help="Model override (default: auto per backend)")
 
     # promote
     p_promote = sub.add_parser("promote", help="Promote L2 summaries to L1 knowledge")
     p_promote.add_argument("--project", help="Only promote for this project path")
-    p_promote.add_argument("--model", default="haiku", help="Model for promotion (default: haiku)")
+    p_promote.add_argument("--model", default=None, help="Model override (default: auto per backend)")
 
     # serve
     sub.add_parser("serve", help="Start MCP server")
@@ -349,6 +379,10 @@ def main() -> None:
     p_recall = sub.add_parser("recall", help="Recall a specific session")
     p_recall.add_argument("session_id", help="Session UUID")
     p_recall.add_argument("--messages", action="store_true", help="Show messages")
+
+    # auto
+    p_auto = sub.add_parser("auto", help="Run full pipeline: ingest → summarize → promote")
+    p_auto.add_argument("--model", default=None, help="Model override for summarize & promote")
 
     args = parser.parse_args()
 
@@ -365,6 +399,7 @@ def main() -> None:
         "promote": cmd_promote,
         "serve": cmd_serve,
         "recall": cmd_recall,
+        "auto": cmd_auto,
     }
 
     commands[args.command](args)

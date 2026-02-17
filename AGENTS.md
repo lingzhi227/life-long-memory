@@ -4,7 +4,7 @@ Instructions for AI agents working with the Life-Long Memory codebase.
 
 ## Overview
 
-Life-Long Memory is a lifelong context memory system for CLI coding agents (Claude Code, Codex CLI). It ingests session transcripts, summarizes them, consolidates cross-session knowledge, and exposes everything via MCP tools.
+Life-Long Memory is a lifelong context memory system for CLI coding agents (Claude Code, Codex CLI, Gemini CLI). It ingests session transcripts, summarizes them, consolidates cross-session knowledge, and exposes everything via MCP tools.
 
 ## Architecture
 
@@ -16,7 +16,7 @@ src/
   search.py         # Hybrid search combining BM25 + recency + importance
   summarize.py      # L3->L2: per-session LLM summarization
   promote.py        # L2->L1: cross-session knowledge consolidation
-  llm.py            # LLM calls via `claude --print` subprocess (no API keys)
+  llm.py            # LLM calls via CLI subprocesses: claude, codex, gemini (no API keys)
   entities.py       # Regex entity extraction (files, functions, errors)
   background.py     # Job queue (unused in current CLI flow)
   mcp_server.py     # MCP server with 4 tools for agent integration
@@ -24,13 +24,14 @@ src/
     base.py          # Abstract BaseParser interface + ParsedSession/ParsedMessage
     claude_code.py   # Parser for ~/.claude/projects/ JSONL files
     codex.py         # Parser for ~/.codex/sessions/ JSONL files
+    gemini.py        # Parser for ~/.gemini/tmp/ JSON files
 ```
 
 ## Key Design Decisions
 
 1. **Zero external dependencies** for core functionality. Optional deps for MCP server (`mcp[cli]`) and direct API access (`anthropic`, `openai`).
 
-2. **LLM calls use `claude --print` subprocess** instead of API SDKs. This leverages the locally installed Claude Code CLI's OAuth authentication, so no `ANTHROPIC_API_KEY` is needed. The `CLAUDECODE` env var must be unset to allow nested invocation (see `llm.py`).
+2. **LLM calls use locally installed CLI subprocesses** (claude, codex, gemini) instead of API SDKs. No API keys needed — each CLI handles its own auth. When summarizing a session, `call_llm()` routes to the same CLI that produced it (source-aware routing), falling back to any available CLI. The `CLAUDECODE` env var must be unset for Claude CLI nested invocation (see `llm.py`).
 
 3. **Three-tier memory model**:
    - **L3** (raw): Full session transcripts, FTS5-indexed
@@ -74,5 +75,6 @@ All tests use temporary in-memory SQLite databases for isolation. No external se
 ## Environment Notes
 
 - **Nested Claude invocation**: `llm.py` clears the `CLAUDECODE` env var before spawning `claude --print` subprocesses. This is required because Claude Code blocks nested sessions by default.
+- **Source-aware LLM routing**: `call_llm(prompt, source=...)` dispatches to the right CLI backend. See `llm.py` for backend details and fallback logic.
 - **Database path**: `~/.tactical/memory.sqlite` (hardcoded default, configurable via `MemoryConfig.db_path`)
 - **MCP config**: User-level at `~/.claude/.mcp.json`, project-level at `.mcp.json`

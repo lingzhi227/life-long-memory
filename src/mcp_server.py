@@ -21,12 +21,22 @@ def get_db() -> MemoryDB:
     return _db
 
 
+def _auto_refresh() -> None:
+    """Auto-ingest new sessions and kick off background summarize/promote."""
+    from src.auto import auto_ingest, auto_process_background
+
+    db = get_db()
+    auto_ingest(db)
+    auto_process_background()
+
+
 def _do_search(
     query: str,
     limit: int = 10,
     project: str | None = None,
     after: str | None = None,
 ) -> str:
+    _auto_refresh()
     db = get_db()
     after_epoch = None
     if after:
@@ -59,6 +69,7 @@ def _do_timeline(
     before: str | None = None,
     limit: int = 20,
 ) -> str:
+    _auto_refresh()
     db = get_db()
     after_epoch = None
     before_epoch = None
@@ -94,6 +105,7 @@ def _do_timeline(
 
 
 def _do_project_context(project_path: str) -> str:
+    _auto_refresh()
     db = get_db()
     l1_text = select_l1_context(db, project_path, budget_tokens=2000)
 
@@ -119,6 +131,7 @@ def _do_project_context(project_path: str) -> str:
 
 
 def _do_recall_session(session_id: str) -> str:
+    _auto_refresh()
     db = get_db()
     session = db.get_session(session_id)
     if not session:

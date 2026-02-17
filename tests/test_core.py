@@ -4,11 +4,13 @@ import json
 import tempfile
 import time
 from pathlib import Path
+from unittest.mock import patch, MagicMock
 
 import pytest
 
 from src.db import MemoryDB
 from src.entities import extract_entities, extract_entities_for_session
+from src.llm import _resolve_backend, call_llm, DEFAULT_MODELS, SOURCE_TO_BACKEND
 from src.parsers.base import iso_to_epoch, truncate, infer_project_from_cwd
 from src.search import hybrid_search, recency_score, importance_score
 
@@ -189,6 +191,155 @@ class TestEntities:
         assert stats["total_entities"] > 0
 
 
+class TestGeminiParser:
+    """Tests for the Gemini CLI session parser."""
+
+    def _make_session_json(self, tmpdir: Path) -> Path:
+        """Create a mock Gemini session file in the expected directory structure."""
+        project_hash = "abc123def456"
+        chats_dir = tmpdir / project_hash / "chats"
+        chats_dir.mkdir(parents=True)
+        session_file = chats_dir / "session-2026-02-13T01-31-600e16e2.json"
+        session_data = {
+            "sessionId": "600e16e2-68f5-48df-97a5-1cedbe3c57a2",
+            "projectHash": project_hash,
+            "startTime": "2026-02-13T01:31:56.201Z",
+            "lastUpdated": "2026-02-13T01:32:10.699Z",
+            "messages": [
+                {
+                    "id": "msg-1",
+                    "timestamp": "2026-02-13T01:31:56.500Z",
+                    "type": "user",
+                    "content": [{"text": "search the latest nba score"}],
+                },
+                {
+                    "id": "msg-2",
+                    "timestamp": "2026-02-13T01:32:00.000Z",
+                    "type": "gemini",
+                    "content": "",
+                    "toolCalls": [
+                        {
+                            "name": "google_web_search",
+                            "args": {"query": "latest nba score"},
+                            "result": [{"functionResponse": {"result": "Lakers 110 - Celtics 105"}}],
+                            "status": "success",
+                        }
+                    ],
+                    "thoughts": [
+                        {
+                            "subject": "Querying NBA Scores",
+                            "description": "Searching for the latest NBA scores.",
+                        }
+                    ],
+                    "model": "gemini-3-pro-preview",
+                    "tokens": {"input": 8000, "output": 13, "cached": 0, "thoughts": 36, "total": 8049},
+                },
+                {
+                    "id": "msg-3",
+                    "timestamp": "2026-02-13T01:32:10.000Z",
+                    "type": "gemini",
+                    "content": "The latest NBA score is Lakers 110, Celtics 105.",
+                    "tokens": {"input": 8259, "output": 108, "total": 8367},
+                    "model": "gemini-3-pro-preview",
+                },
+            ],
+        }
+        session_file.write_text(json.dumps(session_data))
+        return tmpdir
+
+    def test_discover_files(self):
+        from src.parsers.gemini import GeminiParser
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = self._make_session_json(Path(tmpdir))
+            parser = GeminiParser()
+            files = parser.discover_files([base])
+            assert len(files) == 1
+            assert files[0].name.startswith("session-")
+
+    def test_parse_session_metadata(self):
+        from src.parsers.gemini import GeminiParser
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = self._make_session_json(Path(tmpdir))
+            parser = GeminiParser()
+            files = parser.discover_files([base])
+            session = parser.parse(files[0])
+
+            assert session is not None
+            assert session.id == "600e16e2-68f5-48df-97a5-1cedbe3c57a2"
+            assert session.source == "gemini"
+            assert session.model == "gemini-3-pro-preview"
+            assert session.first_message_at > 0
+            assert session.last_message_at >= session.first_message_at
+            assert session.title == "search the latest nba score"
+
+    def test_parse_messages(self):
+        from src.parsers.gemini import GeminiParser
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = self._make_session_json(Path(tmpdir))
+            parser = GeminiParser()
+            files = parser.discover_files([base])
+            session = parser.parse(files[0])
+
+            assert session is not None
+            assert session.user_message_count == 1
+            # Messages: 1 user + 1 thinking + 1 tool_call + 1 tool_result + 1 assistant text
+            assert session.message_count == 5
+
+            roles = [m.role for m in session.messages]
+            assert roles[0] == "user"
+            content_types = [m.content_type for m in session.messages]
+            assert "thinking" in content_types
+            assert "tool_call" in content_types
+            assert "tool_result" in content_types
+            assert "text" in content_types
+
+    def test_parse_tool_calls(self):
+        from src.parsers.gemini import GeminiParser
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = self._make_session_json(Path(tmpdir))
+            parser = GeminiParser()
+            files = parser.discover_files([base])
+            session = parser.parse(files[0])
+
+            assert "google_web_search" in session.tools_used
+            tool_msgs = [m for m in session.messages if m.content_type == "tool_call"]
+            assert len(tool_msgs) == 1
+            assert tool_msgs[0].tool_name == "google_web_search"
+
+    def test_parse_tokens(self):
+        from src.parsers.gemini import GeminiParser
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = self._make_session_json(Path(tmpdir))
+            parser = GeminiParser()
+            files = parser.discover_files([base])
+            session = parser.parse(files[0])
+
+            assert session.total_tokens == 8049 + 8367
+
+    def test_parse_empty_file(self):
+        from src.parsers.gemini import GeminiParser
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            p = Path(tmpdir) / "empty.json"
+            p.write_text("{}")
+            parser = GeminiParser()
+            assert parser.parse(p) is None
+
+    def test_parse_no_messages(self):
+        from src.parsers.gemini import GeminiParser
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            p = Path(tmpdir) / "no_msgs.json"
+            p.write_text(json.dumps({"sessionId": "x", "messages": []}))
+            parser = GeminiParser()
+            assert parser.parse(p) is None
+
+
 class TestParsers:
     def test_iso_to_epoch(self):
         ts = iso_to_epoch("2025-11-20T23:43:13.218Z")
@@ -235,3 +386,95 @@ class TestSearch:
         results = hybrid_search(db_with_data, "netplan permissions")
         assert len(results) > 0
         assert results[0].session_id == "test-session-1"
+
+
+class TestLLMBackend:
+    """Tests for source-aware LLM backend dispatch."""
+
+    def test_source_to_backend_mapping(self):
+        assert SOURCE_TO_BACKEND["claude_code"] == "claude"
+        assert SOURCE_TO_BACKEND["codex"] == "codex"
+        assert SOURCE_TO_BACKEND["gemini"] == "gemini"
+
+    def test_default_models(self):
+        assert DEFAULT_MODELS["claude"] == "haiku"
+        assert DEFAULT_MODELS["codex"] == "o3"
+        assert DEFAULT_MODELS["gemini"] == "gemini-2.5-flash"
+
+    @patch("src.llm.shutil.which")
+    def test_resolve_backend_native(self, mock_which):
+        """Source's native CLI is available — use it."""
+        mock_which.return_value = "/usr/bin/claude"
+        assert _resolve_backend("claude_code") == "claude"
+
+        mock_which.return_value = "/usr/bin/codex"
+        assert _resolve_backend("codex") == "codex"
+
+        mock_which.return_value = "/usr/bin/gemini"
+        assert _resolve_backend("gemini") == "gemini"
+
+    @patch("src.llm.shutil.which")
+    def test_resolve_backend_fallback(self, mock_which):
+        """Source's CLI not available — fall back to another."""
+        # codex not found, but claude is
+        def which_side_effect(cmd):
+            return "/usr/bin/claude" if cmd == "claude" else None
+        mock_which.side_effect = which_side_effect
+
+        assert _resolve_backend("codex") == "claude"
+
+    @patch("src.llm.shutil.which")
+    def test_resolve_backend_no_cli(self, mock_which):
+        """No CLI available — raises RuntimeError."""
+        mock_which.return_value = None
+        with pytest.raises(RuntimeError, match="No LLM CLI backend found"):
+            _resolve_backend("claude_code")
+
+    @patch("src.llm.shutil.which")
+    def test_resolve_backend_none_source(self, mock_which):
+        """None source — fall back to first available."""
+        def which_side_effect(cmd):
+            return "/usr/bin/gemini" if cmd == "gemini" else None
+        mock_which.side_effect = which_side_effect
+
+        assert _resolve_backend(None) == "gemini"
+
+    @patch("src.llm.call_claude")
+    @patch("src.llm._resolve_backend")
+    def test_call_llm_dispatches_claude(self, mock_resolve, mock_call):
+        mock_resolve.return_value = "claude"
+        mock_call.return_value = "response"
+
+        result = call_llm("test prompt", source="claude_code")
+        assert result == "response"
+        mock_call.assert_called_once_with("test prompt", model="haiku")
+
+    @patch("src.llm.call_codex")
+    @patch("src.llm._resolve_backend")
+    def test_call_llm_dispatches_codex(self, mock_resolve, mock_call):
+        mock_resolve.return_value = "codex"
+        mock_call.return_value = "response"
+
+        result = call_llm("test prompt", source="codex")
+        assert result == "response"
+        mock_call.assert_called_once_with("test prompt", model="o3")
+
+    @patch("src.llm.call_gemini")
+    @patch("src.llm._resolve_backend")
+    def test_call_llm_dispatches_gemini(self, mock_resolve, mock_call):
+        mock_resolve.return_value = "gemini"
+        mock_call.return_value = "response"
+
+        result = call_llm("test prompt", source="gemini")
+        assert result == "response"
+        mock_call.assert_called_once_with("test prompt", model="gemini-2.5-flash")
+
+    @patch("src.llm.call_claude")
+    @patch("src.llm._resolve_backend")
+    def test_call_llm_model_override(self, mock_resolve, mock_call):
+        """User-specified model overrides backend default."""
+        mock_resolve.return_value = "claude"
+        mock_call.return_value = "response"
+
+        result = call_llm("test prompt", source="claude_code", model="sonnet")
+        mock_call.assert_called_once_with("test prompt", model="sonnet")

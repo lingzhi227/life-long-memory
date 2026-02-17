@@ -87,10 +87,10 @@ def _parse_json_response(text: str) -> dict | None:
 def summarize_session(
     db: MemoryDB,
     session_id: str,
-    model: str = "haiku",
+    model: str | None = None,
 ) -> dict[str, Any] | None:
-    """Generate a summary for a session using the local Claude CLI."""
-    from src.llm import call_claude
+    """Generate a summary for a session using the source-appropriate CLI backend."""
+    from src.llm import call_llm
 
     session = db.get_session(session_id)
     if not session:
@@ -104,15 +104,17 @@ def summarize_session(
     if len(conversation) < 100:
         return None
 
+    source = session.get("source", "claude_code")
+
     prompt = SUMMARIZE_PROMPT.format(
         model=session.get("model", "unknown"),
-        source=session.get("source", "unknown"),
+        source=source,
         project=session.get("project_name", "unknown"),
         cwd=session.get("cwd", "unknown"),
         conversation=conversation,
     )
 
-    text = call_claude(prompt, model=model)
+    text = call_llm(prompt, source=source, model=model)
     data = _parse_json_response(text)
     if not data:
         return None
@@ -125,7 +127,7 @@ def summarize_session(
         "commands_run": json.dumps(data.get("commands_run", [])),
         "outcome": data.get("outcome", "unknown"),
         "generated_at": int(time.time()),
-        "generator_model": model,
+        "generator_model": model or "default",
     }
 
     db.upsert_summary(summary)

@@ -40,10 +40,10 @@ Only include entries with confidence >= 0.5. Return empty array [] if nothing is
 def promote_project_knowledge(
     db: MemoryDB,
     project_path: str,
-    model: str = "haiku",
+    model: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Consolidate session summaries into L1 project knowledge using local Claude CLI."""
-    from src.llm import call_claude
+    """Consolidate session summaries into L1 project knowledge using source-appropriate CLI backend."""
+    from src.llm import call_llm
 
     # Get all summarized sessions for this project
     sessions = db.list_sessions(project_path=project_path, limit=100)
@@ -60,6 +60,13 @@ def promote_project_knowledge(
     if len(summaries) < 2:
         return []
 
+    # Determine the dominant source for this project's sessions
+    source_counts: dict[str, int] = {}
+    for s in sessions:
+        src = s.get("source", "claude_code")
+        source_counts[src] = source_counts.get(src, 0) + 1
+    dominant_source = max(source_counts, key=source_counts.get)
+
     existing = db.get_project_knowledge(project_path)
     existing_text = "\n".join(
         f"- [{e['knowledge_type']}] {e['content']} (confidence: {e['confidence']})"
@@ -72,7 +79,7 @@ def promote_project_knowledge(
         existing=existing_text,
     )
 
-    text = call_claude(prompt, model=model)
+    text = call_llm(prompt, source=dominant_source, model=model)
 
     try:
         entries = json.loads(text)

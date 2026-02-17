@@ -1,6 +1,6 @@
 # Life-Long Memory
 
-A lifelong context memory system for CLI coding agents. Automatically ingests, summarizes, and consolidates knowledge from your [Claude Code](https://docs.anthropic.com/en/docs/claude-code) and [Codex CLI](https://github.com/openai/codex) sessions, then exposes it via [MCP](https://modelcontextprotocol.io/) tools so your AI agent remembers what you've worked on across sessions.
+A lifelong context memory system for CLI coding agents. Automatically ingests, summarizes, and consolidates knowledge from your [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Codex CLI](https://github.com/openai/codex), and [Gemini CLI](https://github.com/google-gemini/gemini-cli) sessions, then exposes it via [MCP](https://modelcontextprotocol.io/) tools so your AI agent remembers what you've worked on across sessions.
 
 <p align="center">
   <img src="assets/architecture.svg" alt="Life-Long Memory Architecture" width="100%">
@@ -8,7 +8,7 @@ A lifelong context memory system for CLI coding agents. Automatically ingests, s
 
 ## Why
 
-CLI agents like Claude Code and Codex are powerful, but every session starts from scratch. Life-Long Memory solves this by:
+CLI agents like Claude Code, Codex, and Gemini are powerful, but every session starts from scratch. Life-Long Memory solves this by:
 
 - **Ingesting** past session transcripts from multiple CLI tools
 - **Summarizing** them into structured knowledge using LLM
@@ -46,12 +46,13 @@ pip install -e ".[mcp]"
 ### 1. Ingest your sessions
 
 ```bash
-# Ingest from all configured sources (Claude Code + Codex)
+# Ingest from all configured sources (Claude Code + Codex + Gemini)
 life-long-memory ingest
 
 # Only ingest from one source
 life-long-memory ingest --source claude_code
 life-long-memory ingest --source codex
+life-long-memory ingest --source gemini
 ```
 
 ### 2. Generate summaries (L3 -> L2)
@@ -77,7 +78,19 @@ life-long-memory promote
 life-long-memory promote --project /path/to/project
 ```
 
-### 4. Search & explore
+### 4. Auto-processing
+
+New sessions are **automatically ingested** whenever you query (search, timeline, recall, or MCP tools). No manual `ingest` step needed for day-to-day use.
+
+Summarization and knowledge promotion run **in the background** (once per hour) when triggered by MCP tool usage, so your agent always has fresh context.
+
+To manually run the full pipeline:
+
+```bash
+life-long-memory auto
+```
+
+### 5. Search & explore
 
 ```bash
 # Search across all sessions
@@ -96,9 +109,9 @@ life-long-memory recall <session-uuid> --messages
 life-long-memory stats
 ```
 
-### 5. Connect to Claude Code via MCP
+### 6. Connect via MCP
 
-Add to `~/.claude/.mcp.json`:
+**Claude Code** — add to `~/.claude/.mcp.json`:
 
 ```json
 {
@@ -111,7 +124,27 @@ Add to `~/.claude/.mcp.json`:
 }
 ```
 
-Restart Claude Code. Four MCP tools become available:
+**Gemini CLI** — add via CLI, then set `trust: true` to bypass per-tool authorization prompts:
+
+```bash
+gemini mcp add life-long-memory -- life-long-memory serve
+```
+
+Even with YOLO mode (`Ctrl+Y`), Gemini CLI has a separate trust layer for MCP server tool calls. To avoid repeated authorization prompts, edit `~/.gemini/settings.json` and add `"trust": true`:
+
+```json
+{
+  "mcpServers": {
+    "life-long-memory": {
+      "command": "life-long-memory",
+      "args": ["serve"],
+      "trust": true
+    }
+  }
+}
+```
+
+Restart your CLI tool. Four MCP tools become available:
 
 | Tool | Description |
 |------|-------------|
@@ -122,9 +155,21 @@ Restart Claude Code. Four MCP tools become available:
 
 ## LLM Backend
 
-Life-Long Memory uses the locally installed **Claude Code CLI** (`claude --print`) for all LLM calls (summarize, promote). No API keys are needed - it piggybacks on Claude Code's built-in OAuth authentication.
+Life-Long Memory uses locally installed CLI tools for all LLM calls (summarize, promote). No API keys are needed — each CLI handles its own authentication.
 
-The `CLAUDECODE` environment variable is automatically cleared for subprocess invocations to allow nested usage.
+**Source-aware routing**: When summarizing a session, the system uses the same CLI tool that produced it. A Codex session gets summarized via `codex exec`, a Gemini session via `gemini`, and a Claude Code session via `claude --print`. If the source's CLI isn't installed, it falls back to any available CLI.
+
+| Backend | CLI Command | Default Model |
+|---------|-------------|---------------|
+| Claude Code | `claude --print --model {m}` | `haiku` |
+| Codex CLI | `codex exec -m {m}` | `o3` |
+| Gemini CLI | `gemini --model {m}` | `gemini-2.5-flash` |
+
+For knowledge promotion (which consolidates sessions from mixed sources), the dominant source's CLI is used.
+
+The `--model` flag on `summarize` and `promote` commands overrides the backend default. If not specified, each backend picks its own fast/cheap model.
+
+The `CLAUDECODE` environment variable is automatically cleared for Claude CLI subprocess invocations to allow nested usage.
 
 ## Database
 
@@ -155,8 +200,9 @@ score = fts_bm25 * 0.5 + recency * 0.25 + importance * 0.25
 |--------|-----------------|--------|
 | Claude Code | `~/.claude/projects/{slug}/{uuid}.jsonl` | `parsers/claude_code.py` |
 | Codex CLI | `~/.codex/sessions/{year}/{month}/{date}/rollout-*.jsonl` | `parsers/codex.py` |
+| Gemini CLI | `~/.gemini/tmp/{projectHash}/chats/session-*.json` | `parsers/gemini.py` |
 
-Adding a new source requires implementing the `BaseParser` interface (`parsers/base.py`).
+Adding a new source requires implementing the `SessionParser` interface (`parsers/base.py`).
 
 ## Project Structure
 
@@ -170,7 +216,7 @@ life-long-memory/
     search.py               # Hybrid search (BM25 + recency + importance)
     summarize.py            # L3->L2 session summarization via LLM
     promote.py              # L2->L1 cross-session knowledge consolidation
-    llm.py                  # LLM invocation via claude CLI subprocess
+    llm.py                  # LLM invocation via CLI subprocesses (claude, codex, gemini)
     entities.py             # Regex-based entity extraction
     background.py           # Job queue for async processing
     mcp_server.py           # MCP server exposing memory tools
@@ -178,6 +224,7 @@ life-long-memory/
       base.py               # Abstract parser interface
       claude_code.py        # Claude Code session parser
       codex.py              # Codex CLI session parser
+      gemini.py             # Gemini CLI session parser
   tests/
     test_core.py            # Unit tests (DB, entities, parsers, search)
   pyproject.toml

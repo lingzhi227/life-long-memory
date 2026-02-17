@@ -24,6 +24,10 @@ class Config:
     )
     codex_enabled: bool = True
     claude_code_enabled: bool = True
+    gemini_paths: list[Path] = field(
+        default_factory=lambda: [Path.home() / ".gemini" / "tmp"]
+    )
+    gemini_enabled: bool = True
 
     db_path: Path = field(
         default_factory=lambda: Path.home() / ".tactical" / "memory.sqlite"

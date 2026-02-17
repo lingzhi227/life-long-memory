@@ -45,7 +45,7 @@ class ParsedSession:
     """Normalized session metadata + messages from any CLI tool."""
 
     id: str
-    source: str  # 'codex' | 'claude_code'
+    source: str  # 'codex' | 'claude_code' | 'gemini'
     project_path: str | None = None
     project_name: str | None = None
     cwd: str | None = None
