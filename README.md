@@ -137,6 +137,14 @@ If you prefer to configure MCP manually instead of using `life-long-memory setup
 }
 ```
 
+**Codex CLI** — add to `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.life-long-memory]
+command = "life-long-memory"
+args = ["serve"]
+```
+
 **Gemini CLI** — add to `~/.gemini/settings.json` with `"trust": true` to bypass per-tool authorization prompts:
 
 ```json

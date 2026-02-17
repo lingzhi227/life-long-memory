@@ -385,22 +385,22 @@ CLI_TOOLS = [
         "binary": "claude",
         "name": "Claude Code",
         "session_dir": Path.home() / ".claude" / "projects",
+        "mcp_config": "json",
         "mcp_path": Path.home() / ".claude" / ".mcp.json",
-        "mcp_key": "mcpServers",
     },
     {
         "binary": "codex",
         "name": "Codex CLI",
         "session_dir": Path.home() / ".codex" / "sessions",
-        "mcp_path": None,  # Codex doesn't support MCP config files
-        "mcp_key": None,
+        "mcp_config": "toml",
+        "mcp_path": Path.home() / ".codex" / "config.toml",
     },
     {
         "binary": "gemini",
         "name": "Gemini CLI",
         "session_dir": Path.home() / ".gemini" / "tmp",
+        "mcp_config": "json",
         "mcp_path": Path.home() / ".gemini" / "settings.json",
-        "mcp_key": "mcpServers",
     },
 ]
 
@@ -427,6 +427,35 @@ def _configure_mcp_claude(mcp_path: Path) -> str:
     return "added"
 
 
+def _configure_mcp_codex(mcp_path: Path) -> str:
+    """Configure MCP for Codex CLI (TOML config). Returns status message."""
+    import tomllib
+
+    if mcp_path.exists():
+        with open(mcp_path, "rb") as f:
+            config = tomllib.load(f)
+        if "life-long-memory" in config.get("mcp_servers", {}):
+            return "already configured"
+        # Append new section to preserve existing formatting/comments
+        existing = mcp_path.read_text()
+        if not existing.endswith("\n"):
+            existing += "\n"
+        existing += (
+            '\n[mcp_servers.life-long-memory]\n'
+            'command = "life-long-memory"\n'
+            'args = ["serve"]\n'
+        )
+        mcp_path.write_text(existing)
+    else:
+        mcp_path.parent.mkdir(parents=True, exist_ok=True)
+        mcp_path.write_text(
+            '[mcp_servers.life-long-memory]\n'
+            'command = "life-long-memory"\n'
+            'args = ["serve"]\n'
+        )
+    return "added"
+
+
 def _configure_mcp_gemini(mcp_path: Path) -> str:
     """Configure MCP for Gemini CLI. Returns status message."""
     config = json.loads(mcp_path.read_text()) if mcp_path.exists() else {}
@@ -441,6 +470,14 @@ def _configure_mcp_gemini(mcp_path: Path) -> str:
     mcp_path.parent.mkdir(parents=True, exist_ok=True)
     mcp_path.write_text(json.dumps(config, indent=2) + "\n")
     return "added"
+
+
+# Dispatch table for MCP configuration
+_MCP_CONFIGURATORS = {
+    "claude": _configure_mcp_claude,
+    "codex": _configure_mcp_codex,
+    "gemini": _configure_mcp_gemini,
+}
 
 
 def cmd_setup(args: argparse.Namespace) -> None:
@@ -481,21 +518,14 @@ def cmd_setup(args: argparse.Namespace) -> None:
     # Step 4/5: Configure MCP
     print("\n  [4/5] Configuring MCP servers...")
     if not args.no_mcp:
-        # Claude Code
-        claude_tool = CLI_TOOLS[0]
-        if detected["claude"]:
-            status = _configure_mcp_claude(claude_tool["mcp_path"])
-            print(f"        \u2713 Claude Code: {status}")
-        else:
-            print(f"        \u2014 Claude Code: skipped (not installed)")
-
-        # Gemini CLI
-        gemini_tool = CLI_TOOLS[2]
-        if detected["gemini"]:
-            status = _configure_mcp_gemini(gemini_tool["mcp_path"])
-            print(f"        \u2713 Gemini CLI: {status}")
-        else:
-            print(f"        \u2014 Gemini CLI: skipped (not installed)")
+        for tool in CLI_TOOLS:
+            binary = tool["binary"]
+            if detected[binary]:
+                configurator = _MCP_CONFIGURATORS[binary]
+                status = configurator(tool["mcp_path"])
+                print(f"        \u2713 {tool['name']}: {status}")
+            else:
+                print(f"        \u2014 {tool['name']}: skipped (not installed)")
     else:
         print("        skipped (--no-mcp)")
 
