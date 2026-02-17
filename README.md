@@ -30,20 +30,45 @@ L3 Raw Sessions ──(summarize)──▶ L2 Session Summaries ──(promote)�
 ## Quick Start
 
 ```bash
-pip install "life-long-memory[mcp] @ git+https://github.com/lingzhi227/life-long-memory.git" && life-long-memory setup
+pip install --user "life-long-memory[mcp] @ git+https://github.com/lingzhi227/life-long-memory.git"
+export PATH="$HOME/.local/bin:$PATH"  # if life-long-memory not found after install
+life-long-memory setup                # detect CLIs, configure MCP, ingest sessions
+life-long-memory doctor               # verify everything works
 ```
 
-That's it. This single command installs the package, detects your CLI tools, configures MCP, and ingests all sessions. Restart your CLI tool to activate.
+Setup detects your CLI tools (Claude Code, Codex, Gemini), writes MCP configs with the **absolute binary path** (avoids PATH issues), and ingests all sessions. Restart your CLI tool to activate MCP memory tools.
+
+To also generate summaries and knowledge (requires a CLI tool for LLM calls):
+
+```bash
+life-long-memory auto
+```
 
 Or install from source:
 
 ```bash
 git clone https://github.com/lingzhi227/life-long-memory.git
 cd life-long-memory
-pip install -e ".[mcp]" && life-long-memory setup
+pip install -e ".[mcp]"
+life-long-memory setup
 ```
 
 Use `--no-mcp` if you only want CLI access without MCP server configuration.
+
+### Troubleshooting
+
+If `life-long-memory` is not found after install:
+
+```bash
+# Check where pip installed scripts
+python -m site --user-base  # usually ~/.local
+ls "$(python -m site --user-base)/bin/life-long-memory"
+
+# Add to PATH permanently
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+```
+
+Run `life-long-memory doctor` to diagnose MCP connectivity issues.
 
 ### MCP Tools
 
@@ -122,7 +147,7 @@ life-long-memory stats
 
 ### Manual MCP Configuration
 
-If you prefer to configure MCP manually instead of using `life-long-memory setup`:
+If you prefer to configure MCP manually instead of using `life-long-memory setup`, use the **absolute path** to the binary (run `which life-long-memory` to find it):
 
 **Claude Code** — add to `~/.claude/.mcp.json`:
 
@@ -130,7 +155,7 @@ If you prefer to configure MCP manually instead of using `life-long-memory setup
 {
   "mcpServers": {
     "life-long-memory": {
-      "command": "life-long-memory",
+      "command": "/absolute/path/to/life-long-memory",
       "args": ["serve"]
     }
   }
@@ -141,7 +166,7 @@ If you prefer to configure MCP manually instead of using `life-long-memory setup
 
 ```toml
 [mcp_servers.life-long-memory]
-command = "life-long-memory"
+command = "/absolute/path/to/life-long-memory"
 args = ["serve"]
 ```
 
@@ -151,7 +176,7 @@ args = ["serve"]
 {
   "mcpServers": {
     "life-long-memory": {
-      "command": "life-long-memory",
+      "command": "/absolute/path/to/life-long-memory",
       "args": ["serve"],
       "trust": true
     }

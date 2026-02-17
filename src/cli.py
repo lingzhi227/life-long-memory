@@ -405,6 +405,31 @@ CLI_TOOLS = [
 ]
 
 
+def _find_binary() -> str:
+    """Find absolute path to the life-long-memory binary.
+
+    Tries shutil.which first, then falls back to the bin dir next to
+    sys.executable (handles pip install --user where ~/.local/bin isn't
+    in PATH).  Returns absolute path string, or raises RuntimeError.
+    """
+    name = "life-long-memory"
+    found = shutil.which(name)
+    if found:
+        return str(Path(found).resolve())
+
+    # Fallback: same directory as the running Python interpreter
+    candidate = Path(sys.executable).resolve().parent / name
+    if candidate.exists():
+        return str(candidate)
+
+    raise RuntimeError(
+        f"Cannot find '{name}' binary. pip may have installed it to a "
+        f"directory not in $PATH. Try:\n"
+        f"  export PATH=\"{Path(sys.executable).parent}:$PATH\"\n"
+        f"then re-run: life-long-memory setup"
+    )
+
+
 def _count_files(directory: Path) -> int:
     """Count files recursively in a directory."""
     if not directory.exists():
@@ -412,14 +437,20 @@ def _count_files(directory: Path) -> int:
     return sum(1 for _ in directory.rglob("*") if _.is_file())
 
 
-def _configure_mcp_claude(mcp_path: Path) -> str:
+def _configure_mcp_claude(mcp_path: Path, binary: str) -> str:
     """Configure MCP for Claude Code. Returns status message."""
     config = json.loads(mcp_path.read_text()) if mcp_path.exists() else {}
     servers = config.setdefault("mcpServers", {})
     if "life-long-memory" in servers:
+        # Update binary path if it changed (e.g. was bare name, now absolute)
+        existing_cmd = servers["life-long-memory"].get("command", "")
+        if existing_cmd != binary:
+            servers["life-long-memory"]["command"] = binary
+            mcp_path.write_text(json.dumps(config, indent=2) + "\n")
+            return "updated (fixed path)"
         return "already configured"
     servers["life-long-memory"] = {
-        "command": "life-long-memory",
+        "command": binary,
         "args": ["serve"],
     }
     mcp_path.parent.mkdir(parents=True, exist_ok=True)
@@ -427,43 +458,59 @@ def _configure_mcp_claude(mcp_path: Path) -> str:
     return "added"
 
 
-def _configure_mcp_codex(mcp_path: Path) -> str:
+def _configure_mcp_codex(mcp_path: Path, binary: str) -> str:
     """Configure MCP for Codex CLI (TOML config). Returns status message."""
     import tomllib
 
     if mcp_path.exists():
         with open(mcp_path, "rb") as f:
             config = tomllib.load(f)
-        if "life-long-memory" in config.get("mcp_servers", {}):
+        existing_server = config.get("mcp_servers", {}).get("life-long-memory")
+        if existing_server:
+            existing_cmd = existing_server.get("command", "")
+            if existing_cmd != binary:
+                # Re-read as text and replace the command line
+                text = mcp_path.read_text()
+                text = text.replace(
+                    f'command = "{existing_cmd}"',
+                    f'command = "{binary}"',
+                )
+                mcp_path.write_text(text)
+                return "updated (fixed path)"
             return "already configured"
         # Append new section to preserve existing formatting/comments
         existing = mcp_path.read_text()
         if not existing.endswith("\n"):
             existing += "\n"
         existing += (
-            '\n[mcp_servers.life-long-memory]\n'
-            'command = "life-long-memory"\n'
-            'args = ["serve"]\n'
+            f'\n[mcp_servers.life-long-memory]\n'
+            f'command = "{binary}"\n'
+            f'args = ["serve"]\n'
         )
         mcp_path.write_text(existing)
     else:
         mcp_path.parent.mkdir(parents=True, exist_ok=True)
         mcp_path.write_text(
-            '[mcp_servers.life-long-memory]\n'
-            'command = "life-long-memory"\n'
-            'args = ["serve"]\n'
+            f'[mcp_servers.life-long-memory]\n'
+            f'command = "{binary}"\n'
+            f'args = ["serve"]\n'
         )
     return "added"
 
 
-def _configure_mcp_gemini(mcp_path: Path) -> str:
+def _configure_mcp_gemini(mcp_path: Path, binary: str) -> str:
     """Configure MCP for Gemini CLI. Returns status message."""
     config = json.loads(mcp_path.read_text()) if mcp_path.exists() else {}
     servers = config.setdefault("mcpServers", {})
     if "life-long-memory" in servers:
+        existing_cmd = servers["life-long-memory"].get("command", "")
+        if existing_cmd != binary:
+            servers["life-long-memory"]["command"] = binary
+            mcp_path.write_text(json.dumps(config, indent=2) + "\n")
+            return "updated (fixed path)"
         return "already configured"
     servers["life-long-memory"] = {
-        "command": "life-long-memory",
+        "command": binary,
         "args": ["serve"],
         "trust": True,
     }
@@ -518,14 +565,23 @@ def cmd_setup(args: argparse.Namespace) -> None:
     # Step 4/5: Configure MCP
     print("\n  [4/5] Configuring MCP servers...")
     if not args.no_mcp:
-        for tool in CLI_TOOLS:
-            binary = tool["binary"]
-            if detected[binary]:
-                configurator = _MCP_CONFIGURATORS[binary]
-                status = configurator(tool["mcp_path"])
-                print(f"        \u2713 {tool['name']}: {status}")
-            else:
-                print(f"        \u2014 {tool['name']}: skipped (not installed)")
+        try:
+            binary_path = _find_binary()
+        except RuntimeError as e:
+            print(f"        \u2717 {e}")
+            print("        MCP configuration skipped (binary not found)")
+            binary_path = None
+
+        if binary_path:
+            print(f"        Binary: {binary_path}")
+            for tool in CLI_TOOLS:
+                cli_name = tool["binary"]
+                if detected[cli_name]:
+                    configurator = _MCP_CONFIGURATORS[cli_name]
+                    status = configurator(tool["mcp_path"], binary_path)
+                    print(f"        \u2713 {tool['name']}: {status}")
+                else:
+                    print(f"        \u2014 {tool['name']}: skipped (not installed)")
     else:
         print("        skipped (--no-mcp)")
 
@@ -557,8 +613,114 @@ def cmd_setup(args: argparse.Namespace) -> None:
     elapsed = time.time() - start
     print(f"\n  \u2713 Done! ({elapsed:.1f}s)")
     print(f"    {result['sessions']} sessions ingested, {result['messages']} messages indexed")
-    print(f"    Restart your CLI tool to activate MCP memory tools.")
-    print(f"    Try: life-long-memory search \"your query here\"")
+    print()
+    print(f"  Next steps:")
+    print(f"    1. life-long-memory doctor        # verify everything works")
+    print(f"    2. life-long-memory auto           # generate summaries & knowledge (uses LLM)")
+    print(f"    3. Restart your CLI tool            # activate MCP memory tools")
+
+
+def cmd_doctor(args: argparse.Namespace) -> None:
+    """Verify installation health: binary paths, MCP config, DB, pipeline status."""
+    ok = True
+
+    print("\n  Life-Long Memory Doctor")
+    print("  ========================\n")
+
+    # 1. Check binary
+    print("  [Binary]")
+    try:
+        binary_path = _find_binary()
+        print(f"    \u2713 {binary_path}")
+    except RuntimeError:
+        print(f"    \u2717 life-long-memory not found in PATH")
+        print(f"      Python bin dir: {Path(sys.executable).parent}")
+        ok = False
+        binary_path = None
+
+    # 2. Check MCP configs
+    print("\n  [MCP Configs]")
+    for tool in CLI_TOOLS:
+        mcp_path = tool["mcp_path"]
+        name = tool["name"]
+        fmt = tool["mcp_config"]
+        if not mcp_path.exists():
+            if shutil.which(tool["binary"]):
+                print(f"    \u2717 {name}: config missing ({mcp_path})")
+                ok = False
+            else:
+                print(f"    \u2014 {name}: not installed")
+            continue
+
+        # Parse and check command path
+        try:
+            if fmt == "toml":
+                import tomllib
+                with open(mcp_path, "rb") as f:
+                    cfg = tomllib.load(f)
+                server = cfg.get("mcp_servers", {}).get("life-long-memory")
+            else:
+                cfg = json.loads(mcp_path.read_text())
+                server = cfg.get("mcpServers", {}).get("life-long-memory")
+
+            if not server:
+                print(f"    \u2717 {name}: life-long-memory not in config ({mcp_path})")
+                ok = False
+                continue
+
+            cmd = server.get("command", "")
+            cmd_resolves = shutil.which(cmd) is not None or Path(cmd).exists()
+            if cmd_resolves:
+                print(f"    \u2713 {name}: {cmd}")
+            else:
+                print(f"    \u2717 {name}: command not found: {cmd}")
+                if binary_path:
+                    print(f"      Fix: run 'life-long-memory setup' to update path")
+                ok = False
+        except Exception as e:
+            print(f"    \u2717 {name}: error reading config: {e}")
+            ok = False
+
+    # 3. Check MCP server can import
+    print("\n  [MCP Server]")
+    try:
+        from mcp.server.fastmcp import FastMCP  # noqa: F401
+        print(f"    \u2713 mcp package installed")
+    except ImportError:
+        print(f"    \u2717 mcp package not installed")
+        print(f"      Fix: pip install 'life-long-memory[mcp]'")
+        ok = False
+
+    # 4. Check database
+    print("\n  [Database]")
+    config = default_config()
+    if config.db_path.exists():
+        db = get_db()
+        stats = db.stats()
+        size_mb = config.db_path.stat().st_size / (1024 * 1024)
+        print(f"    \u2713 {config.db_path} ({size_mb:.1f} MB)")
+        print(f"    Sessions: {stats['total_sessions']}")
+        by_tier = stats.get("sessions_by_tier", {})
+        l3 = by_tier.get("L3", 0)
+        l2 = by_tier.get("L2", 0)
+        print(f"    Tiers: {l3} L3, {l2} L2")
+        print(f"    Summaries: {stats['total_summaries']}")
+        print(f"    Knowledge: {stats['total_knowledge_entries']} entries")
+        if stats['total_sessions'] == 0:
+            print(f"    \u26a0 No sessions — run 'life-long-memory setup' to ingest")
+        elif stats['total_summaries'] == 0:
+            print(f"    \u26a0 No summaries — run 'life-long-memory auto' to generate")
+    else:
+        print(f"    \u2717 {config.db_path} (not found)")
+        print(f"      Fix: run 'life-long-memory setup'")
+        ok = False
+
+    # Verdict
+    print()
+    if ok:
+        print("  \u2713 All checks passed. MCP memory tools should work on next CLI restart.")
+    else:
+        print("  \u2717 Issues found. Fix the problems above, then run doctor again.")
 
 
 def main() -> None:
@@ -616,6 +778,9 @@ def main() -> None:
     p_setup = sub.add_parser("setup", help="Auto-configure: detect CLIs, init DB, configure MCP")
     p_setup.add_argument("--no-mcp", action="store_true", help="Skip MCP configuration")
 
+    # doctor
+    sub.add_parser("doctor", help="Verify installation: binary paths, MCP config, DB health")
+
     args = parser.parse_args()
 
     if args.command is None:
@@ -633,6 +798,7 @@ def main() -> None:
         "recall": cmd_recall,
         "auto": cmd_auto,
         "setup": cmd_setup,
+        "doctor": cmd_doctor,
     }
 
     commands[args.command](args)
