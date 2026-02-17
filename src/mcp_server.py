@@ -5,9 +5,9 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 
-from life_long_memory.db import MemoryDB
-from life_long_memory.search import hybrid_search, timeline_search
-from life_long_memory.promote import select_l1_context
+from src.db import MemoryDB
+from src.search import hybrid_search, timeline_search
+from src.promote import select_l1_context
 
 # Global DB instance, initialized on startup
 _db: MemoryDB | None = None

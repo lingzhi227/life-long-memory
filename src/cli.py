@@ -9,12 +9,12 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from life_long_memory.config import default_config
-from life_long_memory.db import MemoryDB
-from life_long_memory.entities import extract_entities_for_session
-from life_long_memory.parsers.codex import CodexParser
-from life_long_memory.parsers.claude_code import ClaudeCodeParser
-from life_long_memory.search import hybrid_search, timeline_search
+from src.config import default_config
+from src.db import MemoryDB
+from src.entities import extract_entities_for_session
+from src.parsers.codex import CodexParser
+from src.parsers.claude_code import ClaudeCodeParser
+from src.search import hybrid_search, timeline_search
 
 
 def get_db() -> MemoryDB:
@@ -189,7 +189,7 @@ def cmd_stats(args: argparse.Namespace) -> None:
 
 def cmd_summarize(args: argparse.Namespace) -> None:
     """Generate summaries for unsummarized sessions."""
-    from life_long_memory.summarize import summarize_session
+    from src.summarize import summarize_session
 
     db = get_db()
     sessions = db.get_unsummarized_sessions(min_user_messages=3)
@@ -218,7 +218,7 @@ def cmd_summarize(args: argparse.Namespace) -> None:
 
 def cmd_promote(args: argparse.Namespace) -> None:
     """Promote L2 summaries to L1 project knowledge."""
-    from life_long_memory.promote import promote_project_knowledge
+    from src.promote import promote_project_knowledge
 
     db = get_db()
 
@@ -254,7 +254,7 @@ def cmd_promote(args: argparse.Namespace) -> None:
 
 def cmd_serve(args: argparse.Namespace) -> None:
     """Start the MCP server."""
-    from life_long_memory.mcp_server import run_server
+    from src.mcp_server import run_server
     print("Starting life-long-memory MCP server...")
     run_server()
 

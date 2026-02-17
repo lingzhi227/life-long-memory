@@ -233,7 +233,7 @@ Adding a new source requires implementing the `BaseParser` interface (`parsers/b
 
 ```
 life-long-memory/
-  life_long_memory/         # Python package
+  src/                      # Python package
     __init__.py
     cli.py                  # CLI entry point (ingest, search, summarize, promote, ...)
     config.py               # Configuration & defaults

@@ -7,10 +7,10 @@ from pathlib import Path
 
 import pytest
 
-from life_long_memory.db import MemoryDB
-from life_long_memory.entities import extract_entities, extract_entities_for_session
-from life_long_memory.parsers.base import iso_to_epoch, truncate, infer_project_from_cwd
-from life_long_memory.search import hybrid_search, recency_score, importance_score
+from src.db import MemoryDB
+from src.entities import extract_entities, extract_entities_for_session
+from src.parsers.base import iso_to_epoch, truncate, infer_project_from_cwd
+from src.search import hybrid_search, recency_score, importance_score
 
 
 @pytest.fixture

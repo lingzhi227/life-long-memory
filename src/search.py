@@ -7,7 +7,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
-from life_long_memory.db import MemoryDB
+from src.db import MemoryDB
 
 
 @dataclass

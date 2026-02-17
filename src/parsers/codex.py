@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from life_long_memory.parsers.base import (
+from src.parsers.base import (
     ParsedMessage,
     ParsedSession,
     SessionParser,

@@ -6,7 +6,7 @@ import json
 import time
 from typing import Any
 
-from life_long_memory.db import MemoryDB
+from src.db import MemoryDB
 
 
 PROMOTE_PROMPT = """You are analyzing multiple coding session summaries for the same project.
@@ -43,7 +43,7 @@ def promote_project_knowledge(
     model: str = "haiku",
 ) -> list[dict[str, Any]]:
     """Consolidate session summaries into L1 project knowledge using local Claude CLI."""
-    from life_long_memory.llm import call_claude
+    from src.llm import call_claude
 
     # Get all summarized sessions for this project
     sessions = db.list_sessions(project_path=project_path, limit=100)

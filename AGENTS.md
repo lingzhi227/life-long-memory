@@ -9,7 +9,7 @@ Life-Long Memory is a lifelong context memory system for CLI coding agents (Clau
 ## Architecture
 
 ```
-life_long_memory/
+src/
   cli.py            # CLI entry point - all user-facing commands
   db.py             # SQLite layer - schema, CRUD, FTS5 search
   config.py         # Configuration dataclass with defaults

@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from life_long_memory.db import MemoryDB
+from src.db import MemoryDB
 
 # Entity extraction patterns
 PATTERNS: dict[str, re.Pattern] = {

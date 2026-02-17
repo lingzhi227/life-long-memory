@@ -6,8 +6,8 @@ import asyncio
 import logging
 import traceback
 
-from life_long_memory.db import MemoryDB
-from life_long_memory.entities import extract_entities_for_session
+from src.db import MemoryDB
+from src.entities import extract_entities_for_session
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,7 @@ async def process_job(db: MemoryDB, job: dict) -> None:
         logger.info(f"Extracted {count} entities from session {target_id}")
 
     elif job_type == "summarize":
-        from life_long_memory.summarize import summarize_session_anthropic
+        from src.summarize import summarize_session_anthropic
         result = await summarize_session_anthropic(db, target_id)
         if result:
             logger.info(f"Summarized session {target_id}")
@@ -30,7 +30,7 @@ async def process_job(db: MemoryDB, job: dict) -> None:
             logger.warning(f"Failed to summarize session {target_id}")
 
     elif job_type == "promote":
-        from life_long_memory.promote import promote_project_knowledge_anthropic
+        from src.promote import promote_project_knowledge_anthropic
         entries = await promote_project_knowledge_anthropic(db, target_id)
         logger.info(f"Promoted {len(entries)} knowledge entries for {target_id}")
 

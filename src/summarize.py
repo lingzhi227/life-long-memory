@@ -6,7 +6,7 @@ import json
 import time
 from typing import Any
 
-from life_long_memory.db import MemoryDB
+from src.db import MemoryDB
 
 
 SUMMARIZE_PROMPT = """You are analyzing a CLI coding session transcript. Generate a structured summary.
@@ -90,7 +90,7 @@ def summarize_session(
     model: str = "haiku",
 ) -> dict[str, Any] | None:
     """Generate a summary for a session using the local Claude CLI."""
-    from life_long_memory.llm import call_claude
+    from src.llm import call_claude
 
     session = db.get_session(session_id)
     if not session:

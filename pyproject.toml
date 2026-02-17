@@ -20,4 +20,7 @@ dev = [
 ]
 
 [project.scripts]
-life-long-memory = "life_long_memory.cli:main"
+life-long-memory = "src.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
