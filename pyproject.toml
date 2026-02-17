@@ -1,0 +1,26 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "life-long-memory"
+version = "0.1.0"
+description = "Lifelong context memory system for CLI agents"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+summarize = ["anthropic>=0.40.0"]
+openai = ["openai>=1.50.0"]
+mcp = ["mcp[cli]>=1.0.0"]
+all = ["life-long-memory[summarize,openai,mcp]"]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+]
+
+[project.scripts]
+life-long-memory = "life_long_memory.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/life_long_memory"]
