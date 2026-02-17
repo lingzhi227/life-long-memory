@@ -83,7 +83,7 @@ def _mark_full_run() -> None:
     COOLDOWN_PATH.write_text(str(time.time()))
 
 
-def auto_process(db=None, model=None, force=False) -> dict | None:
+def auto_process(db=None, model=None, backend=None, force=False) -> dict | None:
     """Run full pipeline: ingest -> summarize -> promote.
 
     Respects a 1-hour cooldown unless force=True.
@@ -106,7 +106,7 @@ def auto_process(db=None, model=None, force=False) -> dict | None:
     summarized = 0
     for session in sessions:
         try:
-            result = summarize_session(db, session["id"], model=model)
+            result = summarize_session(db, session["id"], model=model, backend=backend)
             if result:
                 summarized += 1
         except Exception:
@@ -120,7 +120,7 @@ def auto_process(db=None, model=None, force=False) -> dict | None:
     promoted = 0
     for project_path, _project_name in rows:
         try:
-            entries = promote_project_knowledge(db, project_path, model=model)
+            entries = promote_project_knowledge(db, project_path, model=model, backend=backend)
             if entries:
                 promoted += len(entries)
         except Exception:

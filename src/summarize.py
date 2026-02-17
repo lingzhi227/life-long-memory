@@ -88,6 +88,7 @@ def summarize_session(
     db: MemoryDB,
     session_id: str,
     model: str | None = None,
+    backend: str | None = None,
 ) -> dict[str, Any] | None:
     """Generate a summary for a session using the source-appropriate CLI backend."""
     from src.llm import call_llm
@@ -114,7 +115,7 @@ def summarize_session(
         conversation=conversation,
     )
 
-    text = call_llm(prompt, source=source, model=model)
+    text = call_llm(prompt, source=source, model=model, backend=backend)
     data = _parse_json_response(text)
     if not data:
         return None

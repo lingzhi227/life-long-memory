@@ -41,6 +41,7 @@ def promote_project_knowledge(
     db: MemoryDB,
     project_path: str,
     model: str | None = None,
+    backend: str | None = None,
 ) -> list[dict[str, Any]]:
     """Consolidate session summaries into L1 project knowledge using source-appropriate CLI backend."""
     from src.llm import call_llm
@@ -79,7 +80,7 @@ def promote_project_knowledge(
         existing=existing_text,
     )
 
-    text = call_llm(prompt, source=dominant_source, model=model)
+    text = call_llm(prompt, source=dominant_source, model=model, backend=backend)
 
     try:
         entries = json.loads(text)

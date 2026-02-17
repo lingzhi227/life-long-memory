@@ -77,6 +77,7 @@ def call_llm(
     *,
     source: str | None = None,
     model: str | None = None,
+    backend: str | None = None,
 ) -> str:
     """Dispatch an LLM call to the appropriate backend based on source.
 
@@ -85,19 +86,24 @@ def call_llm(
         source: Session source (e.g. "claude_code", "codex", "gemini").
             Used to pick the backend. Falls back to any available CLI.
         model: Model override. If None, uses the backend's default.
+        backend: Force a specific backend ("claude", "codex", "gemini"),
+            bypassing source-based routing.
 
     Returns:
         The text response from the LLM.
     """
-    backend = _resolve_backend(source)
-    effective_model = model or DEFAULT_MODELS[backend]
+    if backend:
+        resolved = backend
+    else:
+        resolved = _resolve_backend(source)
+    effective_model = model or DEFAULT_MODELS[resolved]
 
     dispatch = {
         "claude": call_claude,
         "codex": call_codex,
         "gemini": call_gemini,
     }
-    return dispatch[backend](prompt, model=effective_model)
+    return dispatch[resolved](prompt, model=effective_model)
 
 
 def call_claude(
@@ -182,6 +188,7 @@ def call_codex(
 ) -> str:
     """Call an LLM via the locally installed Codex CLI.
 
+    Uses `codex exec --json` and parses the JSON output for assistant text.
     Returns the text response.
     """
     with tempfile.NamedTemporaryFile(
@@ -194,7 +201,8 @@ def call_codex(
         cmd = [
             "codex", "exec",
             "--skip-git-repo-check",
-            "--ephemeral",
+            "--json",
+            "--full-auto",
             "-m", model,
             f"Read the file {prompt_file} and follow the instructions in it exactly. Return ONLY the requested output format, nothing else.",
         ]
@@ -215,9 +223,57 @@ def call_codex(
             raise RuntimeError(
                 f"codex CLI returned no output (exit={proc.returncode}): {proc.stderr[:500]}"
             )
-        return output
+
+        # Parse JSON output — extract assistant message text
+        return _parse_codex_json(output)
     finally:
         Path(prompt_file).unlink(missing_ok=True)
+
+
+def _parse_codex_json(output: str) -> str:
+    """Extract assistant text from codex exec --json output.
+
+    The output is newline-delimited JSON events. We look for message events
+    with role=assistant and extract the text content.
+    """
+    assistant_texts = []
+
+    for line in output.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+
+        # Handle various codex JSON output formats
+        etype = event.get("type", "")
+
+        # Direct message format
+        if etype == "message" and event.get("role") == "assistant":
+            content = event.get("content", "")
+            if isinstance(content, str) and content:
+                assistant_texts.append(content)
+            elif isinstance(content, list):
+                for block in content:
+                    if isinstance(block, dict) and block.get("type") == "text":
+                        assistant_texts.append(block["text"])
+                    elif isinstance(block, str):
+                        assistant_texts.append(block)
+
+        # Output/result event
+        elif etype in ("output", "result"):
+            text = event.get("text") or event.get("result") or event.get("content", "")
+            if text:
+                assistant_texts.append(text)
+
+    if assistant_texts:
+        return "\n".join(assistant_texts)
+
+    # Fallback: if no structured events found, return raw output
+    # (handles plain text output from older codex versions)
+    return output
 
 
 def call_gemini(

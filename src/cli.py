@@ -260,7 +260,7 @@ def cmd_summarize(args: argparse.Namespace) -> None:
     for i, session in enumerate(sessions[:limit], 1):
         label = session.get('title', session['id'][:20])
         try:
-            result = summarize_session(db, session["id"], model=args.model)
+            result = summarize_session(db, session["id"], model=args.model, backend=getattr(args, "backend", None))
             if result:
                 print(f"  [{i}/{min(limit, len(sessions))}] Summarized: {label}")
                 count += 1
@@ -295,7 +295,7 @@ def cmd_promote(args: argparse.Namespace) -> None:
         label = project_name or project_path
         try:
             entries = promote_project_knowledge(
-                db, project_path, model=args.model
+                db, project_path, model=args.model, backend=getattr(args, "backend", None)
             )
             if entries:
                 print(f"  [{label}] Promoted {len(entries)} knowledge entries")
@@ -369,7 +369,7 @@ def cmd_auto(args: argparse.Namespace) -> None:
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     print(f"[{ts}] Running auto pipeline: ingest → summarize → promote")
 
-    result = auto_process(model=args.model, force=True)
+    result = auto_process(model=args.model, backend=getattr(args, "backend", None), force=True)
 
     elapsed = time.time() - start
     ts_end = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -756,11 +756,13 @@ def main() -> None:
     p_summarize = sub.add_parser("summarize", help="Generate session summaries")
     p_summarize.add_argument("--limit", type=int, help="Max sessions to summarize")
     p_summarize.add_argument("--model", default=None, help="Model override (default: auto per backend)")
+    p_summarize.add_argument("--backend", choices=["claude", "codex", "gemini"], help="Force a specific LLM backend")
 
     # promote
     p_promote = sub.add_parser("promote", help="Promote L2 summaries to L1 knowledge")
     p_promote.add_argument("--project", help="Only promote for this project path")
     p_promote.add_argument("--model", default=None, help="Model override (default: auto per backend)")
+    p_promote.add_argument("--backend", choices=["claude", "codex", "gemini"], help="Force a specific LLM backend")
 
     # serve
     sub.add_parser("serve", help="Start MCP server")
@@ -773,6 +775,7 @@ def main() -> None:
     # auto
     p_auto = sub.add_parser("auto", help="Run full pipeline: ingest → summarize → promote")
     p_auto.add_argument("--model", default=None, help="Model override for summarize & promote")
+    p_auto.add_argument("--backend", choices=["claude", "codex", "gemini"], help="Force a specific LLM backend")
 
     # setup
     p_setup = sub.add_parser("setup", help="Auto-configure: detect CLIs, init DB, configure MCP")
