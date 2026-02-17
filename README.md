@@ -232,24 +232,28 @@ Adding a new source requires implementing the `BaseParser` interface (`parsers/b
 ## Project Structure
 
 ```
-src/life_long_memory/
-  __init__.py
-  cli.py            # CLI entry point (ingest, search, summarize, promote, ...)
-  config.py         # Configuration & defaults
-  db.py             # SQLite schema, queries, FTS5
-  search.py         # Hybrid search (BM25 + recency + importance)
-  summarize.py      # L3->L2 session summarization via LLM
-  promote.py        # L2->L1 cross-session knowledge consolidation
-  llm.py            # LLM invocation via claude CLI subprocess
-  entities.py       # Regex-based entity extraction
-  background.py     # Job queue for async processing
-  mcp_server.py     # MCP server exposing memory tools
-  parsers/
-    base.py          # Abstract parser interface
-    claude_code.py   # Claude Code session parser
-    codex.py         # Codex CLI session parser
-tests/
-  test_core.py       # Unit tests (DB, entities, parsers, search)
+life-long-memory/
+  life_long_memory/         # Python package
+    __init__.py
+    cli.py                  # CLI entry point (ingest, search, summarize, promote, ...)
+    config.py               # Configuration & defaults
+    db.py                   # SQLite schema, queries, FTS5
+    search.py               # Hybrid search (BM25 + recency + importance)
+    summarize.py            # L3->L2 session summarization via LLM
+    promote.py              # L2->L1 cross-session knowledge consolidation
+    llm.py                  # LLM invocation via claude CLI subprocess
+    entities.py             # Regex-based entity extraction
+    background.py           # Job queue for async processing
+    mcp_server.py           # MCP server exposing memory tools
+    parsers/
+      base.py               # Abstract parser interface
+      claude_code.py        # Claude Code session parser
+      codex.py              # Codex CLI session parser
+  tests/
+    test_core.py            # Unit tests (DB, entities, parsers, search)
+  pyproject.toml
+  README.md
+  AGENTS.md
 ```
 
 ## License
