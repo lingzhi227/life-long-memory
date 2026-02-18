@@ -124,7 +124,15 @@ Run ingest, summarize, and promote in one step:
 
 ```bash
 life-long-memory auto
+
+# Cap summarize to 10 sessions per run (useful for incremental processing)
+life-long-memory auto --limit 10
+
+# Force a specific LLM backend
+life-long-memory auto --backend claude
 ```
+
+The `--backend` flag is also available on `summarize` and `promote` to override source-aware routing (e.g., summarize codex sessions via Claude).
 
 ### Search & Explore
 
@@ -144,6 +152,20 @@ life-long-memory recall <session-uuid> --messages
 # View stats
 life-long-memory stats
 ```
+
+### Prune Stale Projects
+
+Remove L1 knowledge (and optionally all data) for migrated or deleted project paths:
+
+```bash
+# Delete everything for a stale project
+life-long-memory prune --project /old/path/to/project
+
+# Only delete L1 knowledge entries, keep sessions
+life-long-memory prune --project /old/path/to/project --knowledge-only
+```
+
+Run `life-long-memory doctor` to detect stale projects automatically.
 
 ### Manual MCP Configuration
 
@@ -259,6 +281,7 @@ life-long-memory/
   tests/
     test_core.py            # Unit tests (DB, entities, parsers, search)
   pyproject.toml
+  CHANGELOG.md
   README.md
   AGENTS.md
 ```
