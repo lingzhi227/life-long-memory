@@ -316,7 +316,7 @@ def cmd_promote(args: argparse.Namespace) -> None:
         label = project_name or project_path
         # Count summaries available for this project
         summarized = db.conn.execute(
-            "SELECT COUNT(*) FROM summaries s JOIN sessions ss ON s.session_id = ss.id "
+            "SELECT COUNT(*) FROM session_summaries s JOIN sessions ss ON s.session_id = ss.id "
             "WHERE ss.project_path = ?", (project_path,)
         ).fetchone()[0]
         try:
