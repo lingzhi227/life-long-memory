@@ -391,6 +391,15 @@ class MemoryDB:
         self.conn.commit()
         return cur.lastrowid  # type: ignore[return-value]
 
+    def clear_project_knowledge(self, project_path: str) -> int:
+        """Delete all non-superseded knowledge entries for a project. Returns count deleted."""
+        cur = self.conn.execute(
+            "DELETE FROM project_knowledge WHERE project_path = ? AND superseded_by IS NULL",
+            (project_path,),
+        )
+        self.conn.commit()
+        return cur.rowcount
+
     def get_project_knowledge(self, project_path: str) -> list[dict]:
         rows = self.conn.execute(
             """SELECT * FROM project_knowledge

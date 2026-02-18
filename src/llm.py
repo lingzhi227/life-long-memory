@@ -91,6 +91,9 @@ def call_llm(
 
     Returns:
         The text response from the LLM.
+
+    If the primary backend fails and no explicit backend was forced,
+    automatically falls back to any other available backend.
     """
     if backend:
         resolved = backend
@@ -103,7 +106,25 @@ def call_llm(
         "codex": call_codex,
         "gemini": call_gemini,
     }
-    return dispatch[resolved](prompt, model=effective_model)
+
+    try:
+        return dispatch[resolved](prompt, model=effective_model)
+    except Exception:
+        if backend:
+            raise  # explicit backend requested — don't fallback
+        # Auto-fallback to any other available backend
+        for fb_name in ["claude", "codex", "gemini"]:
+            if fb_name == resolved:
+                continue
+            fb_cmd = fb_name if fb_name != "claude" else "claude"
+            if not shutil.which(fb_cmd):
+                continue
+            try:
+                fb_model = model or DEFAULT_MODELS[fb_name]
+                return dispatch[fb_name](prompt, model=fb_model)
+            except Exception:
+                continue
+        raise  # all backends failed — re-raise original error
 
 
 def call_claude(

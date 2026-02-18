@@ -116,8 +116,13 @@ def promote_project_knowledge(
             "first_seen_at": now,
             "last_confirmed_at": now,
         }
-        db.upsert_project_knowledge(knowledge)
         results.append(knowledge)
+
+    # Replace old entries atomically: clear then insert
+    if results:
+        db.clear_project_knowledge(project_path)
+        for knowledge in results:
+            db.upsert_project_knowledge(knowledge)
 
     return results
 
