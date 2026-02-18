@@ -3,10 +3,27 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 from typing import Any
 
 from src.db import MemoryDB
+
+
+def _normalize(text: str) -> set[str]:
+    """Normalize text to a set of lowercase words for similarity comparison."""
+    return set(re.sub(r'[^\w\s]', '', text.lower()).split())
+
+
+def _word_similarity(a: str, b: str) -> float:
+    """Word-level Jaccard similarity between two strings."""
+    words_a = _normalize(a)
+    words_b = _normalize(b)
+    if not words_a or not words_b:
+        return 0.0
+    intersection = words_a & words_b
+    union = words_a | words_b
+    return len(intersection) / len(union)
 
 
 PROMOTE_PROMPT = """You are analyzing multiple coding session summaries for the same project.
@@ -97,6 +114,7 @@ def promote_project_knowledge(
 
     now = int(time.time())
     session_ids = [s["id"] for s in sessions if db.get_summary(s["id"])]
+    existing_entries = db.get_project_knowledge(project_path)
     results = []
 
     for entry in entries:
@@ -106,23 +124,34 @@ def promote_project_knowledge(
         if confidence < 0.5:
             continue
 
-        knowledge = {
-            "project_path": project_path,
-            "knowledge_type": entry.get("knowledge_type", "pattern"),
-            "content": entry.get("content", ""),
-            "confidence": confidence,
-            "evidence_count": len(summaries),
-            "source_sessions": json.dumps(session_ids[:10]),
-            "first_seen_at": now,
-            "last_confirmed_at": now,
-        }
-        results.append(knowledge)
+        content = entry.get("content", "")
+        ktype = entry.get("knowledge_type", "pattern")
 
-    # Replace old entries atomically: clear then insert
-    if results:
-        db.clear_project_knowledge(project_path)
-        for knowledge in results:
+        # Check for similar existing entry (fuzzy match)
+        matched = None
+        for ex in existing_entries:
+            if _word_similarity(content, ex["content"]) >= 0.7:
+                matched = ex
+                break
+
+        if matched:
+            # Confirm existing entry — bump evidence_count, update confidence
+            db.confirm_knowledge(matched["id"], confidence=confidence)
+            results.append(matched)
+        else:
+            # Insert new entry
+            knowledge = {
+                "project_path": project_path,
+                "knowledge_type": ktype,
+                "content": content,
+                "confidence": confidence,
+                "evidence_count": 1,
+                "source_sessions": json.dumps(session_ids[:10]),
+                "first_seen_at": now,
+                "last_confirmed_at": now,
+            }
             db.upsert_project_knowledge(knowledge)
+            results.append(knowledge)
 
     return results
 

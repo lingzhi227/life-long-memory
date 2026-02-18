@@ -400,6 +400,28 @@ class MemoryDB:
         self.conn.commit()
         return cur.rowcount
 
+    def confirm_knowledge(self, knowledge_id: int, confidence: float | None = None) -> None:
+        """Bump evidence_count and last_confirmed_at for an existing entry."""
+        now = int(time.time())
+        if confidence is not None:
+            self.conn.execute(
+                """UPDATE project_knowledge
+                SET evidence_count = evidence_count + 1,
+                    last_confirmed_at = ?,
+                    confidence = MAX(confidence, ?)
+                WHERE id = ?""",
+                (now, confidence, knowledge_id),
+            )
+        else:
+            self.conn.execute(
+                """UPDATE project_knowledge
+                SET evidence_count = evidence_count + 1,
+                    last_confirmed_at = ?
+                WHERE id = ?""",
+                (now, knowledge_id),
+            )
+        self.conn.commit()
+
     def get_project_knowledge(self, project_path: str) -> list[dict]:
         rows = self.conn.execute(
             """SELECT * FROM project_knowledge

@@ -192,6 +192,13 @@ def run_server():
 
     mcp = FastMCP("life-long-memory")
 
+    # Auto-ingest on startup — pick up any new sessions since last run
+    try:
+        from src.auto import auto_ingest
+        auto_ingest(get_db())
+    except Exception:
+        pass  # best-effort; don't block server startup
+
     @mcp.tool()
     def memory_search(
         query: str,

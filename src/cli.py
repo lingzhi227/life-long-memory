@@ -78,7 +78,9 @@ def _run_ingest(
 
             # Process
             if parsed:
-                if db.session_exists(parsed.id) and not force:
+                if parsed.user_message_count == 0:
+                    pass  # skip trivially empty sessions
+                elif db.session_exists(parsed.id) and not force:
                     source_existing += 1
                     total_skipped += 1
                 else:
@@ -257,18 +259,36 @@ def cmd_summarize(args: argparse.Namespace) -> None:
     print(f"Found {len(sessions)} unsummarized sessions, processing {min(limit, len(sessions))}")
 
     count = 0
+    skipped = 0
+    errors = 0
+    n = min(limit, len(sessions))
     for i, session in enumerate(sessions[:limit], 1):
-        label = session.get('title', session['id'][:20])
+        sid = session['id'][:12]
+        source = session.get('source', '?')
+        msgs = session.get('message_count', 0)
+        label = session.get('title') or sid
         try:
             result = summarize_session(db, session["id"], model=args.model, backend=getattr(args, "backend", None))
             if result:
-                print(f"  [{i}/{min(limit, len(sessions))}] Summarized: {label}")
+                words = len(result.get('summary_text', '').split())
+                print(f"  [{i}/{n}] \u2713 {sid} ({source}, {msgs} msgs) \u2192 {words} word summary")
                 count += 1
             else:
-                print(f"  [{i}/{min(limit, len(sessions))}] Skipped (too short): {label}")
+                print(f"  [{i}/{n}] \u2014 {sid} ({source}, {msgs} msgs) skipped (too short)")
+                skipped += 1
         except Exception as e:
-            print(f"  [{i}/{min(limit, len(sessions))}] Error: {label}: {e}")
-    print(f"\nSummarized {count} sessions.")
+            print(f"  [{i}/{n}] \u2717 {sid} ({source}): {e}")
+            errors += 1
+    print(f"\nSummarized {count} sessions", end="")
+    parts = []
+    if skipped:
+        parts.append(f"{skipped} skipped")
+    if errors:
+        parts.append(f"{errors} errors")
+    if parts:
+        print(f" ({', '.join(parts)})")
+    else:
+        print(".")
 
 
 def cmd_promote(args: argparse.Namespace) -> None:

@@ -54,7 +54,7 @@ def auto_ingest(db=None) -> dict:
                 parsed = parser.parse(fpath)
             except Exception:
                 continue
-            if not parsed or db.session_exists(parsed.id):
+            if not parsed or parsed.user_message_count == 0 or db.session_exists(parsed.id):
                 continue
             db.upsert_session(parsed.to_session_dict())
             msg_dicts = [m.to_dict(parsed.id) for m in parsed.messages]
