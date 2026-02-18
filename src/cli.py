@@ -256,39 +256,37 @@ def cmd_summarize(args: argparse.Namespace) -> None:
         return
 
     limit = args.limit or len(sessions)
-    print(f"Found {len(sessions)} unsummarized sessions, processing {min(limit, len(sessions))}")
+    backend = getattr(args, "backend", None)
+    n = min(limit, len(sessions))
+    backend_info = f" (backend: {backend})" if backend else ""
+    print(f"Found {len(sessions)} unsummarized sessions, processing {n}{backend_info}", flush=True)
 
     count = 0
     skipped = 0
     errors = 0
-    n = min(limit, len(sessions))
     for i, session in enumerate(sessions[:limit], 1):
         sid = session['id'][:12]
         source = session.get('source', '?')
         msgs = session.get('message_count', 0)
-        label = session.get('title') or sid
         try:
-            result = summarize_session(db, session["id"], model=args.model, backend=getattr(args, "backend", None))
+            result = summarize_session(db, session["id"], model=args.model, backend=backend)
             if result:
                 words = len(result.get('summary_text', '').split())
-                print(f"  [{i}/{n}] \u2713 {sid} ({source}, {msgs} msgs) \u2192 {words} word summary")
+                print(f"  [{i}/{n}] \u2713 {sid} ({source}, {msgs} msgs) \u2192 {words} word summary", flush=True)
                 count += 1
             else:
-                print(f"  [{i}/{n}] \u2014 {sid} ({source}, {msgs} msgs) skipped (too short)")
+                print(f"  [{i}/{n}] \u2014 {sid} ({source}, {msgs} msgs) skipped (too short)", flush=True)
                 skipped += 1
         except Exception as e:
-            print(f"  [{i}/{n}] \u2717 {sid} ({source}): {e}")
+            print(f"  [{i}/{n}] \u2717 {sid} ({source}): {e}", flush=True)
             errors += 1
-    print(f"\nSummarized {count} sessions", end="")
     parts = []
     if skipped:
         parts.append(f"{skipped} skipped")
     if errors:
         parts.append(f"{errors} errors")
-    if parts:
-        print(f" ({', '.join(parts)})")
-    else:
-        print(".")
+    suffix = f" ({', '.join(parts)})" if parts else ""
+    print(f"\nSummarized {count} sessions{suffix}.", flush=True)
 
 
 def cmd_promote(args: argparse.Namespace) -> None:
@@ -296,6 +294,7 @@ def cmd_promote(args: argparse.Namespace) -> None:
     from src.promote import promote_project_knowledge
 
     db = get_db()
+    backend = getattr(args, "backend", None)
 
     if args.project:
         projects = [(args.project, None)]
@@ -309,22 +308,38 @@ def cmd_promote(args: argparse.Namespace) -> None:
         print("No projects found.")
         return
 
-    print(f"Promoting knowledge for {len(projects)} projects...")
-    total = 0
+    backend_info = f" (backend: {backend})" if backend else ""
+    print(f"Promoting knowledge for {len(projects)} project(s){backend_info}...", flush=True)
+    total_confirmed = 0
+    total_new = 0
     for project_path, project_name in projects:
         label = project_name or project_path
+        # Count summaries available for this project
+        summarized = db.conn.execute(
+            "SELECT COUNT(*) FROM summaries s JOIN sessions ss ON s.session_id = ss.id "
+            "WHERE ss.project_path = ?", (project_path,)
+        ).fetchone()[0]
         try:
-            entries = promote_project_knowledge(
-                db, project_path, model=args.model, backend=getattr(args, "backend", None)
+            result = promote_project_knowledge(
+                db, project_path, model=args.model, backend=backend
             )
+            entries = result["entries"]
+            confirmed = result["confirmed"]
+            new = result["new"]
             if entries:
-                print(f"  [{label}] Promoted {len(entries)} knowledge entries")
-                total += len(entries)
+                print(f"  \u2713 {label} ({summarized} summaries): confirmed {confirmed} existing, added {new} new", flush=True)
+                total_confirmed += confirmed
+                total_new += new
             else:
-                print(f"  [{label}] No stable patterns found (need >= 2 summarized sessions)")
+                print(f"  \u2014 {label} ({summarized} summaries): no stable patterns found", flush=True)
         except Exception as e:
-            print(f"  [{label}] Error: {e}")
-    print(f"\nPromote complete: {total} knowledge entries created.")
+            print(f"  \u2717 {label}: {e}", flush=True)
+
+    total = total_confirmed + total_new
+    all_entries = db.conn.execute(
+        "SELECT COUNT(*) FROM project_knowledge"
+    ).fetchone()[0]
+    print(f"\nDone. Confirmed {total_confirmed}, added {total_new} entries. {all_entries} total L1 entries.", flush=True)
 
 
 def cmd_serve(args: argparse.Namespace) -> None:
@@ -383,20 +398,63 @@ def cmd_recall(args: argparse.Namespace) -> None:
 
 def cmd_auto(args: argparse.Namespace) -> None:
     """Run full pipeline: ingest → summarize → promote."""
-    from src.auto import auto_process
+    from src.auto import auto_ingest
+    from src.summarize import summarize_session
+    from src.promote import promote_project_knowledge
 
+    backend = getattr(args, "backend", None)
     start = time.time()
-    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    print(f"[{ts}] Running auto pipeline: ingest → summarize → promote")
+    ts = datetime.now().strftime("%Y-%m-%d")
+    print(f"[{ts}] Running auto pipeline: ingest \u2192 summarize \u2192 promote", flush=True)
 
-    result = auto_process(model=args.model, backend=getattr(args, "backend", None), force=True)
+    db = get_db()
+
+    # 1. Ingest
+    ingest_stats = auto_ingest(db)
+    print(f"  Ingested: {ingest_stats['sessions']} new sessions", flush=True)
+
+    # 2. Summarize
+    sessions = db.get_unsummarized_sessions(min_user_messages=3)
+    summarized = 0
+    sum_errors = 0
+    for session in sessions:
+        try:
+            result = summarize_session(db, session["id"], model=args.model, backend=backend)
+            if result:
+                summarized += 1
+        except Exception:
+            sum_errors += 1
+
+    backend_info = f" (via {backend} backend)" if backend else ""
+    error_info = f", {sum_errors} errors" if sum_errors else ""
+    print(f"  Summarized: {summarized} sessions{backend_info}{error_info}", flush=True)
+
+    # 3. Promote
+    rows = db.conn.execute(
+        "SELECT DISTINCT project_path, project_name FROM sessions "
+        "WHERE project_path IS NOT NULL"
+    ).fetchall()
+    total_confirmed = 0
+    total_new = 0
+    project_count = 0
+    for project_path, _project_name in rows:
+        try:
+            result = promote_project_knowledge(db, project_path, model=args.model, backend=backend)
+            if result["entries"]:
+                total_confirmed += result["confirmed"]
+                total_new += result["new"]
+                project_count += 1
+        except Exception:
+            pass
+
+    print(f"  Promoted: {project_count} projects (confirmed {total_confirmed}, added {total_new} entries)", flush=True)
+
+    # Mark cooldown
+    from src.auto import _mark_full_run
+    _mark_full_run()
 
     elapsed = time.time() - start
-    ts_end = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    print(f"\n[{ts_end}] Auto pipeline complete in {elapsed:.1f}s")
-    print(f"  Ingested: {result['ingested']} sessions")
-    print(f"  Summarized: {result['summarized']} sessions")
-    print(f"  Promoted: {result['promoted']} knowledge entries")
+    print(f"Done. ({elapsed:.1f}s)", flush=True)
 
 
 # CLI tool definitions: (binary name, display name, session dirs, MCP config details)

@@ -115,7 +115,9 @@ def promote_project_knowledge(
     now = int(time.time())
     session_ids = [s["id"] for s in sessions if db.get_summary(s["id"])]
     existing_entries = db.get_project_knowledge(project_path)
-    results = []
+    result_entries = []
+    confirmed = 0
+    new = 0
 
     for entry in entries:
         if not isinstance(entry, dict):
@@ -137,7 +139,8 @@ def promote_project_knowledge(
         if matched:
             # Confirm existing entry — bump evidence_count, update confidence
             db.confirm_knowledge(matched["id"], confidence=confidence)
-            results.append(matched)
+            result_entries.append(matched)
+            confirmed += 1
         else:
             # Insert new entry
             knowledge = {
@@ -151,9 +154,10 @@ def promote_project_knowledge(
                 "last_confirmed_at": now,
             }
             db.upsert_project_knowledge(knowledge)
-            results.append(knowledge)
+            result_entries.append(knowledge)
+            new += 1
 
-    return results
+    return {"entries": result_entries, "confirmed": confirmed, "new": new}
 
 
 def select_l1_context(db: MemoryDB, project_path: str, budget_tokens: int = 2000) -> str:

@@ -118,11 +118,17 @@ def auto_process(db=None, model=None, backend=None, force=False) -> dict | None:
         "WHERE project_path IS NOT NULL"
     ).fetchall()
     promoted = 0
+    promoted_confirmed = 0
+    promoted_new = 0
+    promoted_projects = 0
     for project_path, _project_name in rows:
         try:
-            entries = promote_project_knowledge(db, project_path, model=model, backend=backend)
-            if entries:
-                promoted += len(entries)
+            result = promote_project_knowledge(db, project_path, model=model, backend=backend)
+            if result["entries"]:
+                promoted += len(result["entries"])
+                promoted_confirmed += result["confirmed"]
+                promoted_new += result["new"]
+                promoted_projects += 1
         except Exception:
             pass
 
@@ -132,6 +138,9 @@ def auto_process(db=None, model=None, backend=None, force=False) -> dict | None:
         "ingested": ingest_stats["sessions"],
         "summarized": summarized,
         "promoted": promoted,
+        "promoted_confirmed": promoted_confirmed,
+        "promoted_new": promoted_new,
+        "promoted_projects": promoted_projects,
     }
 
 
