@@ -422,6 +422,43 @@ class MemoryDB:
             )
         self.conn.commit()
 
+    def delete_project_data(self, project_path: str) -> dict[str, int]:
+        """Delete all L1 knowledge, summaries, messages, and sessions for a project.
+
+        Returns counts of deleted items.
+        """
+        with self.transaction() as cur:
+            # Get session ids for this project
+            sids = [r[0] for r in cur.execute(
+                "SELECT id FROM sessions WHERE project_path = ?", (project_path,)
+            ).fetchall()]
+
+            knowledge_count = cur.execute(
+                "DELETE FROM project_knowledge WHERE project_path = ?", (project_path,)
+            ).rowcount
+
+            summary_count = 0
+            message_count = 0
+            if sids:
+                placeholders = ",".join("?" * len(sids))
+                summary_count = cur.execute(
+                    f"DELETE FROM session_summaries WHERE session_id IN ({placeholders})", sids
+                ).rowcount
+                message_count = cur.execute(
+                    f"DELETE FROM messages WHERE session_id IN ({placeholders})", sids
+                ).rowcount
+
+            session_count = cur.execute(
+                "DELETE FROM sessions WHERE project_path = ?", (project_path,)
+            ).rowcount
+
+        return {
+            "knowledge": knowledge_count,
+            "summaries": summary_count,
+            "messages": message_count,
+            "sessions": session_count,
+        }
+
     def get_project_knowledge(self, project_path: str) -> list[dict]:
         rows = self.conn.execute(
             """SELECT * FROM project_knowledge
@@ -433,8 +470,22 @@ class MemoryDB:
 
     # ── FTS search ──
 
+    @staticmethod
+    def _escape_fts5(query: str) -> str:
+        """Escape a query for FTS5 MATCH by quoting each token.
+
+        FTS5 interprets characters like - : * ^ and keywords AND/OR/NOT
+        as operators.  Wrapping each token in double-quotes forces literal
+        matching (e.g. "2025-12" "o3-mini").
+        """
+        tokens = query.split()
+        if not tokens:
+            return query
+        return " ".join('"' + t.replace('"', '""') + '"' for t in tokens)
+
     def search_fts(self, query: str, limit: int = 20) -> list[dict]:
         """Full-text search across messages."""
+        escaped = self._escape_fts5(query)
         rows = self.conn.execute(
             """SELECT m.*, s.source, s.project_name, s.cwd,
                       bm25(messages_fts) as rank
@@ -444,7 +495,7 @@ class MemoryDB:
             WHERE messages_fts MATCH ?
             ORDER BY rank
             LIMIT ?""",
-            (query, limit),
+            (escaped, limit),
         ).fetchall()
         return [dict(r) for r in rows]
 

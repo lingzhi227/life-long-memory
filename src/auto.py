@@ -112,10 +112,12 @@ def auto_process(db=None, model=None, backend=None, force=False) -> dict | None:
         except Exception:
             pass
 
-    # Promote
+    # Promote (skip projects with no sessions in last 30 days)
+    thirty_days_ago = int(time.time()) - 30 * 86400
     rows = db.conn.execute(
         "SELECT DISTINCT project_path, project_name FROM sessions "
-        "WHERE project_path IS NOT NULL"
+        "WHERE project_path IS NOT NULL AND last_message_at >= ?",
+        (thirty_days_ago,),
     ).fetchall()
     promoted = 0
     promoted_confirmed = 0

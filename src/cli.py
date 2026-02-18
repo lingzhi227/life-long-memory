@@ -415,9 +415,11 @@ def cmd_auto(args: argparse.Namespace) -> None:
 
     # 2. Summarize
     sessions = db.get_unsummarized_sessions(min_user_messages=3)
+    limit = getattr(args, "limit", None)
+    to_process = sessions[:limit] if limit else sessions
     summarized = 0
     sum_errors = 0
-    for session in sessions:
+    for session in to_process:
         try:
             result = summarize_session(db, session["id"], model=args.model, backend=backend)
             if result:
@@ -427,12 +429,15 @@ def cmd_auto(args: argparse.Namespace) -> None:
 
     backend_info = f" (via {backend} backend)" if backend else ""
     error_info = f", {sum_errors} errors" if sum_errors else ""
-    print(f"  Summarized: {summarized} sessions{backend_info}{error_info}", flush=True)
+    limit_info = f" of {len(sessions)}" if limit and limit < len(sessions) else ""
+    print(f"  Summarized: {summarized}{limit_info} sessions{backend_info}{error_info}", flush=True)
 
-    # 3. Promote
+    # 3. Promote (skip projects with no sessions in last 30 days)
+    thirty_days_ago = int(time.time()) - 30 * 86400
     rows = db.conn.execute(
         "SELECT DISTINCT project_path, project_name FROM sessions "
-        "WHERE project_path IS NOT NULL"
+        "WHERE project_path IS NOT NULL AND last_message_at >= ?",
+        (thirty_days_ago,),
     ).fetchall()
     total_confirmed = 0
     total_new = 0
@@ -793,12 +798,68 @@ def cmd_doctor(args: argparse.Namespace) -> None:
         print(f"      Fix: run 'life-long-memory setup'")
         ok = False
 
+    # 5. Check for stale projects
+    if config.db_path.exists():
+        print("\n  [Stale Projects]")
+        thirty_days_ago = int(time.time()) - 30 * 86400
+        stale_rows = db.conn.execute(
+            """SELECT pk.project_path, COUNT(*) as entry_count,
+                      MAX(s.last_message_at) as last_active
+            FROM project_knowledge pk
+            LEFT JOIN sessions s ON s.project_path = pk.project_path
+            WHERE pk.superseded_by IS NULL
+            GROUP BY pk.project_path
+            HAVING last_active IS NULL OR last_active < ?""",
+            (thirty_days_ago,),
+        ).fetchall()
+        if stale_rows:
+            for row in stale_rows:
+                path = row[0]
+                entries = row[1]
+                last = row[2]
+                if last:
+                    last_dt = datetime.fromtimestamp(last, tz=timezone.utc).strftime("%Y-%m-%d")
+                    print(f"    \u26a0 {path}: {entries} L1 entries, no sessions since {last_dt}")
+                else:
+                    print(f"    \u26a0 {path}: {entries} L1 entries, no sessions found")
+                print(f"      Run: life-long-memory prune --project \"{path}\"")
+        else:
+            print("    \u2713 No stale projects")
+
     # Verdict
     print()
     if ok:
         print("  \u2713 All checks passed. MCP memory tools should work on next CLI restart.")
     else:
         print("  \u2717 Issues found. Fix the problems above, then run doctor again.")
+
+
+def cmd_prune(args: argparse.Namespace) -> None:
+    """Delete L1 knowledge (and optionally sessions) for a project path."""
+    db = get_db()
+    project_path = args.project
+
+    # Show what will be deleted
+    knowledge = db.get_project_knowledge(project_path)
+    sessions = db.list_sessions(project_path=project_path, limit=1000)
+
+    if not knowledge and not sessions:
+        print(f"No data found for: {project_path}")
+        return
+
+    print(f"Project: {project_path}")
+    print(f"  L1 knowledge entries: {len(knowledge)}")
+    print(f"  Sessions: {len(sessions)}")
+
+    if args.knowledge_only:
+        deleted = db.clear_project_knowledge(project_path)
+        print(f"\nDeleted {deleted} L1 knowledge entries.")
+    else:
+        result = db.delete_project_data(project_path)
+        print(f"\nDeleted: {result['knowledge']} L1 entries, "
+              f"{result['summaries']} summaries, "
+              f"{result['sessions']} sessions, "
+              f"{result['messages']} messages")
 
 
 def main() -> None:
@@ -852,6 +913,7 @@ def main() -> None:
 
     # auto
     p_auto = sub.add_parser("auto", help="Run full pipeline: ingest → summarize → promote")
+    p_auto.add_argument("--limit", type=int, default=None, help="Max sessions to summarize per run")
     p_auto.add_argument("--model", default=None, help="Model override for summarize & promote")
     p_auto.add_argument("--backend", choices=["claude", "codex", "gemini"], help="Force a specific LLM backend")
 
@@ -861,6 +923,11 @@ def main() -> None:
 
     # doctor
     sub.add_parser("doctor", help="Verify installation: binary paths, MCP config, DB health")
+
+    # prune
+    p_prune = sub.add_parser("prune", help="Delete data for a stale project path")
+    p_prune.add_argument("--project", required=True, help="Project path to prune")
+    p_prune.add_argument("--knowledge-only", action="store_true", help="Only delete L1 knowledge entries, keep sessions")
 
     args = parser.parse_args()
 
@@ -880,6 +947,7 @@ def main() -> None:
         "auto": cmd_auto,
         "setup": cmd_setup,
         "doctor": cmd_doctor,
+        "prune": cmd_prune,
     }
 
     commands[args.command](args)
