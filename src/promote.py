@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 import time
 from typing import Any
 
 from src.db import MemoryDB
+
+logger = logging.getLogger(__name__)
 
 
 def _normalize(text: str) -> set[str]:
@@ -160,6 +163,112 @@ def promote_project_knowledge(
     return {"entries": result_entries, "confirmed": confirmed, "new": new}
 
 
+def _process_knowledge_entries(
+    db: MemoryDB,
+    entries: list,
+    project_path: str,
+    sessions: list[dict],
+) -> dict:
+    """Shared logic: deduplicate and persist knowledge entries."""
+    if not isinstance(entries, list):
+        return {"entries": [], "confirmed": 0, "new": 0}
+
+    now = int(time.time())
+    session_ids = [s["id"] for s in sessions if db.get_summary(s["id"])]
+    existing_entries = db.get_project_knowledge(project_path)
+    result_entries = []
+    confirmed = 0
+    new = 0
+
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        confidence = entry.get("confidence", 0.5)
+        if confidence < 0.5:
+            continue
+
+        content = entry.get("content", "")
+        ktype = entry.get("knowledge_type", "pattern")
+
+        matched = None
+        for ex in existing_entries:
+            if _word_similarity(content, ex["content"]) >= 0.7:
+                matched = ex
+                break
+
+        if matched:
+            db.confirm_knowledge(matched["id"], confidence=confidence)
+            result_entries.append(matched)
+            confirmed += 1
+        else:
+            knowledge = {
+                "project_path": project_path,
+                "knowledge_type": ktype,
+                "content": content,
+                "confidence": confidence,
+                "evidence_count": 1,
+                "source_sessions": json.dumps(session_ids[:10]),
+                "first_seen_at": now,
+                "last_confirmed_at": now,
+            }
+            db.upsert_project_knowledge(knowledge)
+            result_entries.append(knowledge)
+            new += 1
+
+    return {"entries": result_entries, "confirmed": confirmed, "new": new}
+
+
+async def promote_project_knowledge_anthropic(
+    db: MemoryDB,
+    project_path: str,
+    model: str | None = None,
+) -> dict:
+    """Consolidate session summaries into L1 project knowledge using call_claude_full()."""
+    from src.llm import call_claude_full
+
+    sessions = db.list_sessions(project_path=project_path, limit=100)
+    summaries = []
+    for s in sessions:
+        summary = db.get_summary(s["id"])
+        if summary:
+            summaries.append(
+                f"Session {s['id']} ({s.get('title', 'untitled')}):\n"
+                f"{summary['summary_text']}\n"
+                f"Decisions: {summary.get('key_decisions', '[]')}\n"
+            )
+
+    if len(summaries) < 2:
+        return {"entries": [], "confirmed": 0, "new": 0}
+
+    existing = db.get_project_knowledge(project_path)
+    existing_text = "\n".join(
+        f"- [{e['knowledge_type']}] {e['content']} (confidence: {e['confidence']})"
+        for e in existing
+    ) or "None yet."
+
+    prompt = PROMOTE_PROMPT.format(
+        project_path=project_path,
+        summaries="\n---\n".join(summaries),
+        existing=existing_text,
+    )
+
+    response = call_claude_full(prompt, model=model or "haiku")
+
+    try:
+        entries = json.loads(response.text)
+    except json.JSONDecodeError:
+        match = re.search(r'\[.*\]', response.text, re.DOTALL)
+        if match:
+            try:
+                entries = json.loads(match.group(0))
+            except json.JSONDecodeError:
+                return {"entries": [], "confirmed": 0, "new": 0}
+        else:
+            return {"entries": [], "confirmed": 0, "new": 0}
+
+    return _process_knowledge_entries(db, entries, project_path, sessions)
+
+
 def select_l1_context(db: MemoryDB, project_path: str, budget_tokens: int = 2000) -> str:
     """Select L1 knowledge entries to inject into agent system prompt.
 
@@ -182,3 +291,5 @@ def select_l1_context(db: MemoryDB, project_path: str, budget_tokens: int = 2000
         estimated_tokens += line_tokens
 
     return "\n".join(lines)
+
+

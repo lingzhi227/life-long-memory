@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import json
+import logging
 import time
 from typing import Any
 
 from src.db import MemoryDB
+
+logger = logging.getLogger(__name__)
 
 
 SUMMARIZE_PROMPT = """You are analyzing a CLI coding session transcript. Generate a structured summary.
@@ -129,6 +132,60 @@ def summarize_session(
         "outcome": data.get("outcome", "unknown"),
         "generated_at": int(time.time()),
         "generator_model": model or "default",
+    }
+
+    db.upsert_summary(summary)
+    return summary
+
+
+async def summarize_session_anthropic(
+    db: MemoryDB,
+    session_id: str,
+    model: str | None = None,
+) -> dict[str, Any] | None:
+    """Generate a summary using call_claude_full(), capturing thinking and usage metadata."""
+    from src.llm import call_claude_full
+
+    session = db.get_session(session_id)
+    if not session:
+        return None
+
+    messages = db.get_session_messages(session_id)
+    if not messages:
+        return None
+
+    conversation = format_conversation(messages)
+    if len(conversation) < 100:
+        return None
+
+    source = session.get("source", "claude_code")
+
+    prompt = SUMMARIZE_PROMPT.format(
+        model=session.get("model", "unknown"),
+        source=source,
+        project=session.get("project_name", "unknown"),
+        cwd=session.get("cwd", "unknown"),
+        conversation=conversation,
+    )
+
+    response = call_claude_full(prompt, model=model or "haiku")
+    data = _parse_json_response(response.text)
+    if not data:
+        logger.warning(f"Failed to parse JSON from Claude response for session {session_id}")
+        return None
+
+    summary = {
+        "session_id": session_id,
+        "summary_text": data.get("summary_text", ""),
+        "key_decisions": json.dumps(data.get("key_decisions", [])),
+        "files_touched": json.dumps(data.get("files_touched", [])),
+        "commands_run": json.dumps(data.get("commands_run", [])),
+        "outcome": data.get("outcome", "unknown"),
+        "generated_at": int(time.time()),
+        "generator_model": model or "haiku",
+        "thinking": json.dumps(response.thinking) if response.thinking else None,
+        "usage": json.dumps(response.usage) if response.usage else None,
+        "claude_session_id": response.session_id,
     }
 
     db.upsert_summary(summary)

@@ -32,6 +32,12 @@ class Config:
     db_path: Path = field(
         default_factory=lambda: Path.home() / ".tactical" / "memory.sqlite"
     )
+    claude_projects_base: Path = field(
+        default_factory=lambda: Path.home() / ".claude" / "projects"
+    )
+    traces_dir: Path = field(
+        default_factory=lambda: Path.home() / ".tactical" / "traces"
+    )
 
     # Tier thresholds
     l1_max_tokens_per_project: int = 2000

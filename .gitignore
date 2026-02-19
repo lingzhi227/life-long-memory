@@ -9,3 +9,4 @@ build/
 *.sqlite
 .pytest_cache/
 .DS_Store
+tests/traces/
