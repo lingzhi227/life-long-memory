@@ -22,12 +22,28 @@ def get_db() -> MemoryDB:
 
 
 def _auto_refresh() -> None:
-    """Auto-ingest new sessions and kick off background summarize/promote."""
-    from src.auto import auto_ingest, auto_process_background
+    """Auto-ingest new sessions; trigger daily process on first use of the day."""
+    from src.auto import (
+        _should_run_daily,
+        auto_ingest,
+        daily_auto_process_background,
+        summarize_new_sessions_background,
+        promote_background,
+    )
 
+    # Daily process: first use today → full pipeline in background
+    if _should_run_daily():
+        daily_auto_process_background()
+        return  # daily process handles ingest/summarize/promote itself
+
+    # Lightweight path: just ingest + summarize new sessions
     db = get_db()
-    auto_ingest(db)
-    auto_process_background()
+    result = auto_ingest(db)
+
+    if result["new_session_ids"]:
+        summarize_new_sessions_background(result["new_session_ids"])
+
+    promote_background()
 
 
 def _do_search(
@@ -192,10 +208,13 @@ def run_server():
 
     mcp = FastMCP("life-long-memory")
 
-    # Auto-ingest on startup — pick up any new sessions since last run
+    # On startup: daily process if first use today, otherwise just ingest
     try:
-        from src.auto import auto_ingest
-        auto_ingest(get_db())
+        from src.auto import _should_run_daily, daily_auto_process_background, auto_ingest
+        if _should_run_daily():
+            daily_auto_process_background()
+        else:
+            auto_ingest(get_db())
     except Exception:
         pass  # best-effort; don't block server startup
 

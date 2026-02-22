@@ -362,6 +362,20 @@ class MemoryDB:
         ).fetchone()
         return dict(row) if row else None
 
+    def delete_summary(self, session_id: str) -> bool:
+        """Delete summary for re-generation. Reverts tier to L3."""
+        with self.transaction() as cur:
+            deleted = cur.execute(
+                "DELETE FROM session_summaries WHERE session_id = ?",
+                (session_id,),
+            ).rowcount
+            if deleted:
+                cur.execute(
+                    "UPDATE sessions SET tier = 'L3' WHERE id = ?",
+                    (session_id,),
+                )
+        return deleted > 0
+
     def get_unsummarized_sessions(self, min_user_messages: int = 3) -> list[dict]:
         rows = self.conn.execute(
             """SELECT s.* FROM sessions s

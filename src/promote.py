@@ -62,7 +62,7 @@ def promote_project_knowledge(
     project_path: str,
     model: str | None = None,
     backend: str | None = None,
-) -> list[dict[str, Any]]:
+) -> dict[str, Any]:
     """Consolidate session summaries into L1 project knowledge using source-appropriate CLI backend."""
     from src.llm import call_llm
 
@@ -79,7 +79,7 @@ def promote_project_knowledge(
             )
 
     if len(summaries) < 2:
-        return []
+        return {"entries": [], "confirmed": 0, "new": 0}
 
     # Determine the dominant source for this project's sessions
     source_counts: dict[str, int] = {}
@@ -110,10 +110,10 @@ def promote_project_knowledge(
         if match:
             entries = json.loads(match.group(0))
         else:
-            return []
+            return {"entries": [], "confirmed": 0, "new": 0}
 
     if not isinstance(entries, list):
-        return []
+        return {"entries": [], "confirmed": 0, "new": 0}
 
     now = int(time.time())
     session_ids = [s["id"] for s in sessions if db.get_summary(s["id"])]
