@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.1.3 (2026-02-21)
+
+Fully automated daily processing pipeline with parallel execution and smart session filtering.
+
+### New Features
+
+- **Daily auto process**: On first MCP server use each day, automatically runs the full pipeline (ingest → summarize → promote → self-test) in a background daemon thread. No user intervention required. (`65e4101`)
+- **Updated session detection**: `auto_ingest()` now detects resumed/updated sessions by comparing `message_count`, `user_message_count`, and `last_message_at` — previously skipped all known sessions via `session_exists()`. (`65e4101`)
+- **Parallel summarization**: 8-worker `ThreadPoolExecutor` for L2 summary generation. ~8x faster than sequential processing. (`65e4101`)
+- **Parallel promotion**: 4-worker `ThreadPoolExecutor` for L1 knowledge promotion across projects. (`65e4101`)
+- **Historical backfill**: Daily process automatically catches up on ALL unsummarized quality sessions, not just newly ingested ones. (`65e4101`)
+- **Session quality filter**: Multi-layer filtering to exclude non-human sessions: (`65e4101`)
+  - Minimum thresholds: >= 3 user messages, >= 5 total messages, >= 60s duration
+  - Title pattern matching: filters automated agent prompts (`You are:`), interrupted sessions, single-word replies
+  - Deep message inspection: detects Codex IDE context injection (`# AGENTS.md`, `<environment_context>`, `# Context from my IDE`) that inflates `user_message_count`
+- **`db.delete_summary()`**: Deletes L2 summary and reverts tier to L3, enabling re-summarization of updated sessions. (`65e4101`)
+- **Progress notifications**: `_notify()` writes to both `logger.info` and `sys.stderr` (visible to MCP users) with per-session progress during summarize/promote. (`65e4101`)
+- **Self-test**: Validates DB stats, FTS queryability, and reports L2/L1 counts after each daily run. (`65e4101`)
+
+### Bug Fixes
+
+- **Promote early-return type mismatch**: `promote_project_knowledge()` returned `[]` (list) on early exits but `{"entries": ..., "confirmed": ..., "new": ...}` (dict) on normal path. Callers using `result["entries"]` crashed with `list indices must be integers or slices, not str`. All early returns now return consistent dict. (`65e4101`)
+- **`_mark_full_run` ImportError**: `cli.py:458` imported non-existent `_mark_full_run` from `auto.py`. Added as alias for `_mark_promote_run`. (`65e4101`)
+
+### Improvements
+
+- **MCP server startup**: Checks `_should_run_daily()` on startup and on every tool call. First use of the day triggers full daily process; subsequent calls use lightweight ingest-only path. (`65e4101`)
+- **Smarter promote targeting**: Only promotes projects with >= 2 summarized sessions (previously tried all projects with recent activity). (`65e4101`)
+
 ## 0.1.2 (2026-02-18)
 
 Major update focused on multi-CLI support, one-command setup, and production stability.
