@@ -398,7 +398,7 @@ def cmd_recall(args: argparse.Namespace) -> None:
 
 def cmd_auto(args: argparse.Namespace) -> None:
     """Run full pipeline: ingest → summarize → promote."""
-    from src.auto import auto_ingest
+    from src.auto import auto_ingest, _is_quality_session
     from src.summarize import summarize_session
     from src.promote import promote_project_knowledge
 
@@ -413,23 +413,31 @@ def cmd_auto(args: argparse.Namespace) -> None:
     ingest_stats = auto_ingest(db)
     print(f"  Ingested: {ingest_stats['sessions']} new sessions", flush=True)
 
-    # 2. Summarize
+    # 2. Summarize (with quality filter)
     sessions = db.get_unsummarized_sessions(min_user_messages=3)
+    quality_sessions = [s for s in sessions if _is_quality_session(s, db=db)]
+    print(f"  Quality filter: {len(quality_sessions)}/{len(sessions)} sessions pass", flush=True)
     limit = getattr(args, "limit", None)
-    to_process = sessions[:limit] if limit else sessions
+    to_process = quality_sessions[:limit] if limit else quality_sessions
     summarized = 0
     sum_errors = 0
-    for session in to_process:
+    for i, session in enumerate(to_process, 1):
+        sid = session['id'][:12]
+        title = (session.get('title') or '')[:50].replace('\n', ' ')
         try:
             result = summarize_session(db, session["id"], model=args.model, backend=backend)
             if result:
                 summarized += 1
-        except Exception:
+                print(f"    [{i}/{len(to_process)}] OK {sid} {title}", flush=True)
+            else:
+                print(f"    [{i}/{len(to_process)}] SKIP {sid} {title}", flush=True)
+        except Exception as e:
             sum_errors += 1
+            print(f"    [{i}/{len(to_process)}] ERR {sid} {e}", flush=True)
 
     backend_info = f" (via {backend} backend)" if backend else ""
     error_info = f", {sum_errors} errors" if sum_errors else ""
-    limit_info = f" of {len(sessions)}" if limit and limit < len(sessions) else ""
+    limit_info = f" of {len(quality_sessions)}" if limit and limit < len(quality_sessions) else ""
     print(f"  Summarized: {summarized}{limit_info} sessions{backend_info}{error_info}", flush=True)
 
     # 3. Promote (skip projects with no sessions in last 30 days)
